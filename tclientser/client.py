@@ -1,7 +1,11 @@
 
 import socket
+import pystray
+import PIL.Image
+import customtkinter
+from main import center, deicon
 
-if __name__ == "__main__":
+def reachout():
     ip = "127.0.0.1"
     port = 1234
     
@@ -10,3 +14,7 @@ if __name__ == "__main__":
 
     string = input("Enter string: ")
     server.send(bytes(string, "utf-8"))
+
+if __name__ == "__main__":
+    #startTray()
+    print("test")
