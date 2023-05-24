@@ -6,6 +6,7 @@ import PIL.Image
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+from socket import *
 
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
@@ -13,6 +14,7 @@ mp_face_mesh = mp.solutions.face_mesh
 from PIL import Image, ImageTk
 import cv2
 import threading
+from threading import Thread
 
 
 def center(win):
@@ -69,7 +71,7 @@ class App(customtkinter.CTk):
         self.button = customtkinter.CTkButton(
             frame, text="Student", command=self.clientrun
         )
-        self.button1 = customtkinter.CTkButton(frame, text="Server")
+        self.button1 = customtkinter.CTkButton(frame, text="Server", command=self.serverrun)
 
         # Grid Placement
         frame.pack(pady=10)
@@ -86,6 +88,13 @@ class App(customtkinter.CTk):
         otherFrame.destroy()
         app.iconify()
         app.deiconify()
+        try:
+            print("do_run to false, stop server thread")
+            th.do_run = False
+            hostSocket.shutdown(socket.SHUT_WR)
+            hostSocket.close()
+        except error:
+            print(error)
 
     def checkevent(self, event):
         print("iconify")
@@ -222,6 +231,59 @@ class App(customtkinter.CTk):
         # For webcam input:
         # drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
+    def serverrun(self, *args):
+        global handler, stuapp, face_mesh, clients
+        t = Thread(target=lambda: self.serverthread())
+        t.start()
+        clients = set()
+        self.withdraw()
+        stuapp = customtkinter.CTkToplevel()
+        stuapp.title("Server Client")
+        handler = lambda: self.onCloseOtherFrame(stuapp)
+        stuapp.protocol("WM_DELETE_WINDOW", handler)
+        sw = int(stuapp.winfo_screenwidth() * 0.7)
+        sh = int(stuapp.winfo_screenheight() * 0.8)
+        x = (self.winfo_screenwidth() / 2) - (sw / 2)
+        y = (self.winfo_screenheight() / 2) - (sh / 2)
+        stuapp.geometry(f"{sw}x{sh}+{x}+{y}")
+
+    def serverthread(self):
+        global th, hostSocket
+        hostSocket = socket(AF_INET, SOCK_STREAM)
+        hostSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR,1)
+
+        hostIp = "127.0.0.1"
+        portNumber = 7500
+        hostSocket.bind((hostIp, portNumber))
+        hostSocket.listen()
+        print ("Waiting for connection...")
+        th = threading.currentThread()
+        while getattr(th, "do_run", True):
+            print("hello")
+            clientSocket, clientAddress = hostSocket.accept()
+            clients.add(clientSocket)
+            print("hello1")
+            print ("Connection established with: ", clientAddress[0] + ":" + str(clientAddress[1]))
+            thread = threading(target=clientThread, args=(clientSocket, clientAddress, ))
+            thread.start()
+        
+        #it doesnt reach here
+        print("socket down")
+
+def clientThread(clientSocket, clientAddress):
+    while True:
+        message = clientSocket.recv(1024).decode("utf-8")
+        print(clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message)
+        for client in clients:
+            if client is not clientSocket:
+                client.send((clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message).encode("utf-8"))
+
+        if not message:
+            clients.remove(clientSocket)
+            print(clientAddress[0] + ":" + str(clientAddress[1]) +" disconnected")
+            break
+
+    clientSocket.close()
 
 def list_ports():
     """
