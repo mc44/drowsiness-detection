@@ -3,7 +3,7 @@ import socket
 import pystray
 import PIL.Image
 import customtkinter
-from main import center, deicon
+#from main import center, deicon
 
 def reachout():
     ip = "127.0.0.1"
@@ -16,5 +16,5 @@ def reachout():
     server.send(bytes(string, "utf-8"))
 
 if __name__ == "__main__":
-    #startTray()
+    reachout()
     print("test")

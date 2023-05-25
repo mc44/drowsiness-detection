@@ -6,8 +6,10 @@ import PIL.Image
 import mediapipe as mp
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
+#from socket import AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 from socket import *
-
+import socket as socket1
+#socket import * overlaps with import socket, import * is needed for initiatinng server, socket1 is needed for shutdownz
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_face_mesh = mp.solutions.face_mesh
@@ -89,12 +91,17 @@ class App(customtkinter.CTk):
         app.iconify()
         app.deiconify()
         try:
+            #ip = "127.0.0.1"
+            #port = 7500
+            
+            #server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            #server.connect((ip, port))
             print("do_run to false, stop server thread")
             th.do_run = False
-            hostSocket.shutdown(socket.SHUT_WR)
+            hostSocket.shutdown(socket1.SHUT_RDWR)
             hostSocket.close()
-        except error:
-            print(error)
+        except Exception as e:
+            print(e)
 
     def checkevent(self, event):
         print("iconify")
@@ -268,7 +275,7 @@ class App(customtkinter.CTk):
             thread.start()
         
         #it doesnt reach here
-        print("socket down")
+        print("socket down exit loop")
 
 def clientThread(clientSocket, clientAddress):
     while True:
