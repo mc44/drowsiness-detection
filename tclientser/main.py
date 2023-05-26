@@ -239,20 +239,38 @@ class App(customtkinter.CTk):
         # drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
     def serverrun(self, *args):
-        global handler, stuapp, face_mesh, clients
+        global handler, serapp, face_mesh, clients
         t = Thread(target=lambda: self.serverthread())
         t.start()
         clients = set()
         self.withdraw()
-        stuapp = customtkinter.CTkToplevel()
-        stuapp.title("Server Client")
-        handler = lambda: self.onCloseOtherFrame(stuapp)
-        stuapp.protocol("WM_DELETE_WINDOW", handler)
-        sw = int(stuapp.winfo_screenwidth() * 0.7)
-        sh = int(stuapp.winfo_screenheight() * 0.8)
+        serapp = customtkinter.CTkToplevel()
+        serapp.title("Server Client")
+        handler = lambda: self.onCloseOtherFrame(serapp)
+        serapp.protocol("WM_DELETE_WINDOW", handler)
+        sw = int(serapp.winfo_screenwidth() * 0.7)
+        sh = int(serapp.winfo_screenheight() * 0.8)
         x = (self.winfo_screenwidth() / 2) - (sw / 2)
         y = (self.winfo_screenheight() / 2) - (sh / 2)
-        stuapp.geometry(f"{sw}x{sh}+{x}+{y}")
+        serapp.geometry(f"{sw}x{sh}+{x}+{y}")
+        frame = customtkinter.CTkFrame(
+            serapp, width=self.screen_width, height=self.screen_height
+        )
+
+        serapp.label = customtkinter.CTkLabel(
+            frame, text="Server Dashboard", text_color="white"
+        )
+        serapp.button1 = customtkinter.CTkButton(
+            frame, text="Reselect Mode", command=handler
+        )
+
+        # Grid Placement
+        frame.pack(pady=10)
+
+        serapp.label.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
+        serapp.button1.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
+
+        pc1 = ClientPC(serapp)
 
     def serverthread(self):
         global th, hostSocket
@@ -269,9 +287,8 @@ class App(customtkinter.CTk):
             print("hello")
             clientSocket, clientAddress = hostSocket.accept()
             clients.add(clientSocket)
-            print("hello1")
             print ("Connection established with: ", clientAddress[0] + ":" + str(clientAddress[1]))
-            thread = threading(target=clientThread, args=(clientSocket, clientAddress, ))
+            thread = Thread(target=clientThread, args=(clientSocket, clientAddress))
             thread.start()
         
         #it doesnt reach here
@@ -354,6 +371,30 @@ def startTray(stuapp):
         ),
     )
     icon.run()
+
+class ClientPC(customtkinter.CTkFrame):
+    def __init__(self, parent):
+
+        # Initialize
+        self = customtkinter.CTkFrame(parent)
+        # self.frame.grid_propagate(False)
+
+        label = customtkinter.CTkLabel(
+            self, text="PC #", text_color="white"
+        )
+
+        button = customtkinter.CTkButton(
+            self, text="Student", command=print("s")
+        )
+        button1 = customtkinter.CTkButton(self, text="Server", command=print("s"))
+
+        # Grid Placement
+        self.pack(pady=10)
+
+        label.grid(row=0, column=0, padx=20, pady=5, sticky="ew")
+        button.grid(row=0, column=1, padx=20, pady=10, sticky="ew")
+        button1.grid(row=0, column=1, padx=20, pady=10, sticky="ew")
+        #grid_columnconfigure((0, 3), weight=1)
 
 
 if __name__ == "__main__":
