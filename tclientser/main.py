@@ -90,12 +90,9 @@ class App(customtkinter.CTk):
         otherFrame.destroy()
         app.iconify()
         app.deiconify()
+        if (server):
+            server.close()
         try:
-            #ip = "127.0.0.1"
-            #port = 7500
-            
-            #server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            #server.connect((ip, port))
             print("do_run to false, stop server thread")
             th.do_run = False
             hostSocket.shutdown(socket1.SHUT_RDWR)
@@ -109,6 +106,26 @@ class App(customtkinter.CTk):
 
     def update_gui(self, image):
         photo.paste(image)
+
+    def refresh(self):
+        global server
+        try:
+            server.close()
+        except error:
+            print("not yet connected", error)
+            stuapp.label1.configure(text = "Connection Status: Not Connected")
+        try: 
+            ip = socket1.gethostbyname(socket1.gethostname())
+            port = 5050
+        
+            server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+            server.connect((ip, port))
+            server.send(bytes(str(socket1.gethostname()), "utf-8"))
+            #change to server send pc name as connection status
+            stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
+        except error:
+            print(error)
+            print("error connecting, please refresh")
 
     def update_frame(self, face_mesh, cap, k):
         # while cap.isOpened():
@@ -154,11 +171,25 @@ class App(customtkinter.CTk):
         mesh_image = cv2.flip(image, 1)
         image = Image.fromarray(mesh_image)
         self.update_gui(image)
-        print(k)
-        k += 1
+        #print(k)
+        #k += 1
         stuapp.after(1, lambda: self.update_frame(face_mesh, cap, k))
 
     def start_frame(self, frame):
+        global ip, server
+        try: 
+            ip = socket1.gethostbyname(socket1.gethostname())
+            port = 5050
+        
+            server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+            server.connect((ip, port))
+            server.send(bytes(str(socket1.gethostname()), "utf-8"))
+            stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
+        except error:
+            print(error)
+            print("error connecting, please refresh")
+        
+
         stuapp.button3.configure(state=tk.DISABLED)
         global cap
         cap = cv2.VideoCapture(0)
@@ -168,7 +199,7 @@ class App(customtkinter.CTk):
         global photo
         photo = ImageTk.PhotoImage(image)
         canvas = tk.Canvas(frame, width=photo.width(), height=photo.height())
-        canvas.grid(row=4, column=0, columnspan=2)
+        canvas.grid(row=5, column=0, columnspan=2)
         canvas.create_image((0, 0), image=photo, anchor="nw")
         self.update_frame(face_mesh, cap, 1)
 
@@ -196,6 +227,9 @@ class App(customtkinter.CTk):
         stuapp.label = customtkinter.CTkLabel(
             frame, text="Student Dashboard", text_color="white"
         )
+        stuapp.label1 = customtkinter.CTkLabel(
+            frame, text="Connection Status: Not Connected", text_color="white"
+        )
 
         face_mesh = mp_face_mesh.FaceMesh(
             max_num_faces=1,
@@ -217,6 +251,9 @@ class App(customtkinter.CTk):
         stuapp.button4 = customtkinter.CTkButton(
             frame, text="Stop Detecting", command=lambda: self.stop_frame()
         )
+        stuapp.button5 = customtkinter.CTkButton(
+            frame, text="Refresh Connection", command=lambda: self.refresh()
+        )
 
         # add camera output, detect and select camera
         # status check
@@ -226,14 +263,18 @@ class App(customtkinter.CTk):
         frame.pack(pady=10)
 
         stuapp.label.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
-        stuapp.button1.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
-        stuapp.button2.grid(row=2, column=1, padx=20, pady=10, sticky="ew")
-        stuapp.button3.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
-        stuapp.button4.grid(row=3, column=1, padx=20, pady=10, sticky="ew")
-        stuapp.grid_columnconfigure((0, 3), weight=1)
+        stuapp.label1.grid(row=2, column=0,  padx=20, pady=5, sticky="ew")
+        stuapp.button5.grid(row=2, column=1, padx=20, pady=10, sticky="ew")
+        stuapp.button1.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
+        stuapp.button2.grid(row=3, column=1, padx=20, pady=10, sticky="ew")
+        stuapp.button3.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
+        stuapp.button4.grid(row=4, column=1, padx=20, pady=10, sticky="ew")
+        stuapp.grid_columnconfigure((0, 4), weight=1)
         # stuapp.resizable(False, False)
         # use working_ports
         # available_ports,working_ports,non_working_ports = list_ports()
+
+        
         self.start_frame(frame)
         # For webcam input:
         # drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
@@ -270,31 +311,32 @@ class App(customtkinter.CTk):
         serapp.label.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
         serapp.button1.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
 
-        pc1 = ClientPC(serapp)
+        #pc1 = ClientPC(serapp)
 
     def serverthread(self):
         global th, hostSocket
         hostSocket = socket(AF_INET, SOCK_STREAM)
         hostSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR,1)
-
-        hostIp = "127.0.0.1"
-        portNumber = 7500
+        hostIp = socket1.gethostbyname(socket1.gethostname())
+        gethostname = "test123"
+        portNumber = 5050
         hostSocket.bind((hostIp, portNumber))
         hostSocket.listen()
         print ("Waiting for connection...")
-        th = threading.currentThread()
+        th = threading.current_thread()
         while getattr(th, "do_run", True):
             print("hello")
             clientSocket, clientAddress = hostSocket.accept()
             clients.add(clientSocket)
             print ("Connection established with: ", clientAddress[0] + ":" + str(clientAddress[1]))
-            thread = Thread(target=clientThread, args=(clientSocket, clientAddress))
+            newframe = ClientPC(serapp, gethostname)
+            thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe))
             thread.start()
         
         #it doesnt reach here
         print("socket down exit loop")
 
-def clientThread(clientSocket, clientAddress):
+def clientThread(clientSocket, clientAddress, clientframe):
     while True:
         message = clientSocket.recv(1024).decode("utf-8")
         print(clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message)
@@ -303,6 +345,7 @@ def clientThread(clientSocket, clientAddress):
                 client.send((clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message).encode("utf-8"))
 
         if not message:
+            clientframe.forget()
             clients.remove(clientSocket)
             print(clientAddress[0] + ":" + str(clientAddress[1]) +" disconnected")
             break
@@ -373,28 +416,38 @@ def startTray(stuapp):
     icon.run()
 
 class ClientPC(customtkinter.CTkFrame):
-    def __init__(self, parent):
-
+    def __init__(self, parent, name):
+        super().__init__(parent)
         # Initialize
-        self = customtkinter.CTkFrame(parent)
         # self.frame.grid_propagate(False)
 
-        label = customtkinter.CTkLabel(
-            self, text="PC #", text_color="white"
+        self.label = customtkinter.CTkLabel(
+            self, text=f"PC #: {name}", text_color="white"
+        )
+        self.label1 = customtkinter.CTkLabel(
+            self, text=f"Status: ", text_color="white"
         )
 
-        button = customtkinter.CTkButton(
+        self.button = customtkinter.CTkButton(
             self, text="Student", command=print("s")
         )
-        button1 = customtkinter.CTkButton(self, text="Server", command=print("s"))
+        self.button1 = customtkinter.CTkButton(self, text="Server", command=print("s"))
 
         # Grid Placement
         self.pack(pady=10)
 
-        label.grid(row=0, column=0, padx=20, pady=5, sticky="ew")
-        button.grid(row=0, column=1, padx=20, pady=10, sticky="ew")
-        button1.grid(row=0, column=1, padx=20, pady=10, sticky="ew")
+        self.label.grid(row=0, column=0, columnspan = 2, padx=20, pady=5, sticky="ew")
+        self.label1.grid(row=0, column=2, padx=20, pady=5, sticky="ew")
+        #button.grid(row=0, column=2, padx=20, pady=10, sticky="ew")
+        self.button1.grid(row=0, column=3, padx=20, pady=10, sticky="ew")
         #grid_columnconfigure((0, 3), weight=1)
+
+    def forget(self):
+        self.label.destroy()
+        self.label1.destroy()
+        self.button1.destroy()
+        self.destroy()
+        print("frame removed")
 
 
 if __name__ == "__main__":
