@@ -1,5 +1,5 @@
 import customtkinter
-import tkinter as tk
+import tkinter
 import client
 import pystray
 import PIL.Image
@@ -17,6 +17,10 @@ from PIL import Image, ImageTk
 import cv2
 import threading
 from threading import Thread
+from tkinter import messagebox
+import re
+from datetime import datetime
+from pythonping import ping
 
 
 def center(win):
@@ -50,6 +54,8 @@ def deicon():
 class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
+        #vars
+        self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
 
         self.title("Drowsiness App")
         customtkinter.set_default_color_theme("dark-blue")
@@ -69,6 +75,10 @@ class App(customtkinter.CTk):
         self.label = customtkinter.CTkLabel(
             frame, text="Select mode", text_color="white"
         )
+        self.label1 = customtkinter.CTkLabel(
+            frame, text="PC User", text_color="white"
+        )
+        self.entry = customtkinter.CTkEntry(frame, placeholder_text="FName LName")
 
         self.button = customtkinter.CTkButton(
             frame, text="Student", command=self.clientrun
@@ -78,20 +88,31 @@ class App(customtkinter.CTk):
         # Grid Placement
         frame.pack(pady=10)
 
-        self.label.grid(row=0, column=0, padx=20, pady=5, sticky="ew")
-        self.button.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
-        self.button1.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
-        self.grid_columnconfigure((0, 3), weight=1)
+        self.label.grid(row=0, column=0, columnspan = 2, padx=20, pady=5, sticky="ew")
+        self.label1.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
+        self.entry.grid(row=1, column=1, padx=20, pady=5, sticky="ew")
+        self.button.grid(row=2, column=0, columnspan = 2,padx=20, pady=10, sticky="ew")
+        self.button1.grid(row=3, column=0, columnspan = 2,padx=20, pady=10, sticky="ew")
+        self.grid_columnconfigure((0, 4), weight=1)
         center(self)
         self.resizable(False, False)
+
+    def validate(self):
+        val = re.search("^[\w\d_-]+$", self.entry.get())
+        print(self.entry.get(), val)
+        if (val is None):
+            messagebox.showwarning(title="No name input", message="Please write a value in the PC User entry. Thanks")
+            return False
+        else:
+            return True
 
     def onCloseOtherFrame(self, otherFrame):
         # cap.release()
         otherFrame.destroy()
         app.iconify()
         app.deiconify()
-        if (server):
-            server.close()
+        if (self.server):
+            self.server.close()
         try:
             print("do_run to false, stop server thread")
             th.do_run = False
@@ -108,9 +129,8 @@ class App(customtkinter.CTk):
         photo.paste(image)
 
     def refresh(self):
-        global server
         try:
-            server.close()
+            self.server.close()
         except error:
             print("not yet connected", error)
             stuapp.label1.configure(text = "Connection Status: Not Connected")
@@ -118,9 +138,9 @@ class App(customtkinter.CTk):
             ip = socket1.gethostbyname(socket1.gethostname())
             port = 5050
         
-            server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
-            server.connect((ip, port))
-            server.send(bytes(str(socket1.gethostname()), "utf-8"))
+            self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+            self.server.connect((ip, port))
+            self.server.send(bytes(str(socket1.gethostname()), "utf-8"))
             #change to server send pc name as connection status
             stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
         except error:
@@ -173,24 +193,29 @@ class App(customtkinter.CTk):
         self.update_gui(image)
         #print(k)
         #k += 1
+        #decide result here
+        #make format of things sent
+        self.server.send(bytes(str("1result placeholder"+str(datetime.now())), "utf-8"))
+
         stuapp.after(1, lambda: self.update_frame(face_mesh, cap, k))
 
     def start_frame(self, frame):
-        global ip, server
+        global ip
         try: 
             ip = socket1.gethostbyname(socket1.gethostname())
             port = 5050
         
-            server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
-            server.connect((ip, port))
-            server.send(bytes(str(socket1.gethostname()), "utf-8"))
+            self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+            self.server.connect((ip, port))
+            self.server.send(bytes("0"+str(self.entry.get()), "utf-8"))
             stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
+            print(ping(ip, verbose=True))
         except error:
             print(error)
             print("error connecting, please refresh")
         
 
-        stuapp.button3.configure(state=tk.DISABLED)
+        stuapp.button3.configure(state=tkinter.DISABLED)
         global cap
         cap = cv2.VideoCapture(0)
         ret, imgframe = cap.read()
@@ -198,16 +223,18 @@ class App(customtkinter.CTk):
         image = Image.fromarray(imgframe)
         global photo
         photo = ImageTk.PhotoImage(image)
-        canvas = tk.Canvas(frame, width=photo.width(), height=photo.height())
+        canvas = tkinter.Canvas(frame, width=photo.width(), height=photo.height())
         canvas.grid(row=5, column=0, columnspan=2)
         canvas.create_image((0, 0), image=photo, anchor="nw")
         self.update_frame(face_mesh, cap, 1)
 
     def stop_frame(self):
         cap.release()
-        stuapp.button3.configure(state=tk.NORMAL)
+        stuapp.button3.configure(state=tkinter.NORMAL)
 
     def clientrun(self, *args):
+        if (not(self.validate())):
+            return
         global handler, stuapp, face_mesh
         self.withdraw()
         stuapp = customtkinter.CTkToplevel()
@@ -225,7 +252,7 @@ class App(customtkinter.CTk):
         )
 
         stuapp.label = customtkinter.CTkLabel(
-            frame, text="Student Dashboard", text_color="white"
+            frame, text=f"Student Dashboard: {self.entry.get()}", text_color="white"
         )
         stuapp.label1 = customtkinter.CTkLabel(
             frame, text="Connection Status: Not Connected", text_color="white"
@@ -280,6 +307,8 @@ class App(customtkinter.CTk):
         # drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
 
     def serverrun(self, *args):
+        if (not(self.validate())):
+            return
         global handler, serapp, face_mesh, clients
         t = Thread(target=lambda: self.serverthread())
         t.start()
@@ -299,7 +328,7 @@ class App(customtkinter.CTk):
         )
 
         serapp.label = customtkinter.CTkLabel(
-            frame, text="Server Dashboard", text_color="white"
+            frame, text=f"Server Dashboard: {self.entry.get()}", text_color="white"
         )
         serapp.button1 = customtkinter.CTkButton(
             frame, text="Reselect Mode", command=handler
@@ -318,7 +347,7 @@ class App(customtkinter.CTk):
         hostSocket = socket(AF_INET, SOCK_STREAM)
         hostSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR,1)
         hostIp = socket1.gethostbyname(socket1.gethostname())
-        gethostname = "test123"
+        gethostname = ""
         portNumber = 5050
         hostSocket.bind((hostIp, portNumber))
         hostSocket.listen()
@@ -340,6 +369,9 @@ def clientThread(clientSocket, clientAddress, clientframe):
     while True:
         message = clientSocket.recv(1024).decode("utf-8")
         print(clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message)
+        if message:
+            if (message[0]=="0"):
+                clientframe.change_name(message[1:])
         for client in clients:
             if client is not clientSocket:
                 client.send((clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message).encode("utf-8"))
@@ -420,9 +452,8 @@ class ClientPC(customtkinter.CTkFrame):
         super().__init__(parent)
         # Initialize
         # self.frame.grid_propagate(False)
-
         self.label = customtkinter.CTkLabel(
-            self, text=f"PC #: {name}", text_color="white"
+            self, text=f"PC ID: {name}", text_color="white"
         )
         self.label1 = customtkinter.CTkLabel(
             self, text=f"Status: ", text_color="white"
@@ -441,6 +472,7 @@ class ClientPC(customtkinter.CTkFrame):
         #button.grid(row=0, column=2, padx=20, pady=10, sticky="ew")
         self.button1.grid(row=0, column=3, padx=20, pady=10, sticky="ew")
         #grid_columnconfigure((0, 3), weight=1)
+        self.normal()
 
     def forget(self):
         self.label.destroy()
@@ -448,6 +480,19 @@ class ClientPC(customtkinter.CTkFrame):
         self.button1.destroy()
         self.destroy()
         print("frame removed")
+    
+    def change_name(self,name):
+        self.label.configure(text=f"PC ID: {name}")
+        self.normal()
+    
+    def normal(self):
+        self.configure(border_color="green", border_width=1)
+
+    def no_face(self):
+        self.configure(border_color="yellow", border_width=1)
+    
+    def drowsy(self):
+        self.configure(border_color="red", border_width=1)
 
 
 if __name__ == "__main__":
