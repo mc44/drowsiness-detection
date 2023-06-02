@@ -462,7 +462,7 @@ class ClientPC(customtkinter.CTkFrame):
         self.button = customtkinter.CTkButton(
             self, text="Student", command=print("s")
         )
-        self.button1 = customtkinter.CTkButton(self, text="Server", command=print("s"))
+        self.button1 = customtkinter.CTkButton(self, text="See History", command=print("s"))
 
         # Grid Placement
         self.pack(pady=10)
