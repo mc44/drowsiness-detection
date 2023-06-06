@@ -1,5 +1,4 @@
 import customtkinter
-import tkinter
 import client
 import pystray
 import PIL.Image
@@ -17,11 +16,13 @@ from PIL import Image, ImageTk
 import cv2
 import threading
 from threading import Thread
-from tkinter import messagebox
+import tkinter
+from tkinter import messagebox, ttk
 import re
 from datetime import datetime
 from pythonping import ping
-
+import dbcalls
+HEADERSIZE = 10
 
 def center(win):
     """
@@ -54,6 +55,8 @@ def deicon():
 class App(customtkinter.CTk):
     def __init__(self):
         super().__init__()
+        self.currentuser = ""
+        self.session = ""
         #vars
         self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
 
@@ -99,12 +102,42 @@ class App(customtkinter.CTk):
 
     def validate(self):
         val = re.search("^[\w\d_-]+$", self.entry.get())
-        print(self.entry.get(), val)
+        #print(self.entry.get(), val)
         if (val is None):
             messagebox.showwarning(title="No name input", message="Please write a value in the PC User entry. Thanks")
             return False
         else:
+            self.currentuser = self.entry.get()
             return True
+        
+    def validatelogin(self):
+        val = re.search("^[\w\d_-]+$", self.entry.get())
+        #print(self.entry.get(), val)
+        if (val is None):
+            messagebox.showwarning(title="No name input", message="Please write a value in the PC User entry. Thanks")
+            return False
+        else:
+            #check if user exists
+            text = ""
+            result = dbcalls.get("Account", ["Name"], f"WHERE Name='{self.entry.get()}'")
+            #print(result,"here")
+            if result:
+                dialog = customtkinter.CTkInputDialog(text="Type in password:", title="Login")
+                text = dialog.get_input()
+                if text != None:
+                    if dbcalls.login(self.entry.get(),text):
+                        self.currentuser = self.entry.get()
+                        return True
+            else:
+                dialog = customtkinter.CTkInputDialog(text="Create a password:", title="Register")
+                text = dialog.get_input()
+                if text != None:
+                    val = re.search("^[\w\d_-]+$", text)
+                if val == None or text == None:
+                    return False
+                dbcalls.register(self.entry.get(), text)
+                return True
+        return False
 
     def onCloseOtherFrame(self, otherFrame):
         # cap.release()
@@ -116,8 +149,15 @@ class App(customtkinter.CTk):
         try:
             print("do_run to false, stop server thread")
             th.do_run = False
-            hostSocket.shutdown(socket1.SHUT_RDWR)
-            hostSocket.close()
+            ip = socket1.gethostbyname(socket1.gethostname())
+            port = 5050
+            test = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+            test.connect((ip, port))
+            test.send(bytes(pack("0"+str(socket1.gethostname())), "utf-8"))
+            test.close()
+            
+            #self.hostSocket.shutdown(socket1.SHUT_RDWR)
+            #self.hostSocket.close()
         except Exception as e:
             print(e)
 
@@ -140,7 +180,7 @@ class App(customtkinter.CTk):
         
             self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
             self.server.connect((ip, port))
-            self.server.send(bytes(str(socket1.gethostname()), "utf-8"))
+            self.server.send(bytes(pack(str(socket1.gethostname())), "utf-8"))
             #change to server send pc name as connection status
             stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
         except error:
@@ -195,11 +235,17 @@ class App(customtkinter.CTk):
         #k += 1
         #decide result here
         #make format of things sent
-        self.server.send(bytes(str("1result placeholder"+str(datetime.now())), "utf-8"))
+        self.server.send(bytes(pack(str("1result placeholder"+str(datetime.now()))), "utf-8"))
+        if self.run_status:
+            stuapp.after(1, lambda: self.update_frame(face_mesh, cap, k))
+        else:
+            print("loop stopped")
+            self.server.send(bytes(pack(str("1camera disconnect"+str(datetime.now()))), "utf-8"))
 
-        stuapp.after(1, lambda: self.update_frame(face_mesh, cap, k))
 
     def start_frame(self, frame):
+        print("here atleast1")
+        self.run_status = False
         global ip
         try: 
             ip = socket1.gethostbyname(socket1.gethostname())
@@ -207,36 +253,46 @@ class App(customtkinter.CTk):
         
             self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
             self.server.connect((ip, port))
-            self.server.send(bytes("0"+str(self.entry.get()), "utf-8"))
+            self.server.send(bytes(pack("0"+str(self.entry.get())), "utf-8"))
             stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
             print(ping(ip, verbose=True))
         except error:
             print(error)
             print("error connecting, please refresh")
-        
 
+        self.initiate_frame(frame)    
+
+        
+    def initiate_frame(self,frame):
+        print("here atleast")
         stuapp.button3.configure(state=tkinter.DISABLED)
         global cap
-        cap = cv2.VideoCapture(0)
-        ret, imgframe = cap.read()
-        imgframe = imgframe[:, :, ::-1]
-        image = Image.fromarray(imgframe)
-        global photo
-        photo = ImageTk.PhotoImage(image)
-        canvas = tkinter.Canvas(frame, width=photo.width(), height=photo.height())
-        canvas.grid(row=5, column=0, columnspan=2)
-        canvas.create_image((0, 0), image=photo, anchor="nw")
-        self.update_frame(face_mesh, cap, 1)
+        cap = cv2.VideoCapture(int(self.optionmenu.get()))
+        if not(cap is None or not cap.isOpened()):
+            ret, imgframe = cap.read()
+            imgframe = imgframe[:, :, ::-1]
+            image = Image.fromarray(imgframe)
+            global photo
+            photo = ImageTk.PhotoImage(image)
+            canvas = tkinter.Canvas(frame, width=photo.width(), height=photo.height())
+            canvas.grid(row=2, column=0, columnspan=3)
+            canvas.create_image((0, 0), image=photo, anchor="nw")
+            self.run_status = True
+            stuapp.after(2, lambda: self.update_frame(face_mesh, cap, 1))
 
     def stop_frame(self):
-        cap.release()
-        stuapp.button3.configure(state=tkinter.NORMAL)
+        try:
+            cap.release()
+            stuapp.button3.configure(state=tkinter.NORMAL)
+        except:
+            pass
 
     def clientrun(self, *args):
         if (not(self.validate())):
             return
         global handler, stuapp, face_mesh
         self.withdraw()
+        self.run_status = False
         stuapp = customtkinter.CTkToplevel()
         stuapp.title("Student Client")
         handler = lambda: self.onCloseOtherFrame(stuapp)
@@ -247,8 +303,17 @@ class App(customtkinter.CTk):
         y = (self.winfo_screenheight() / 2) - (sh / 2)
         stuapp.geometry(f"{sw}x{sh}+{x}+{y}")
         # Initialize
-        frame = customtkinter.CTkFrame(
+        mainframe = customtkinter.CTkFrame(
             stuapp, width=self.screen_width, height=self.screen_height
+        )
+        frame = customtkinter.CTkFrame(
+            mainframe, width=self.screen_width, height=self.screen_height
+        )
+        frame1 = customtkinter.CTkFrame(
+            mainframe, width=self.screen_width, height=self.screen_height
+        )
+        frame2 = customtkinter.CTkFrame(
+            mainframe, border_color = '#00000', width = 10
         )
 
         stuapp.label = customtkinter.CTkLabel(
@@ -256,6 +321,12 @@ class App(customtkinter.CTk):
         )
         stuapp.label1 = customtkinter.CTkLabel(
             frame, text="Connection Status: Not Connected", text_color="white"
+        )
+        stuapp.label2 = customtkinter.CTkLabel(
+            frame1, text="Select Working Camera: ", text_color="white"
+        )
+        stuapp.label3 = customtkinter.CTkLabel(
+            frame1, text="Camera ", text_color="white"
         )
 
         face_mesh = mp_face_mesh.FaceMesh(
@@ -267,50 +338,78 @@ class App(customtkinter.CTk):
         stuapp.button1 = customtkinter.CTkButton(
             frame, text="Reselect Mode", command=handler
         )
-        stuapp.button2 = customtkinter.CTkButton(
-            frame, text="Minimize to Tray", command=lambda: startTray(stuapp)
-        )
-
         # threading.Thread(target=self.update_frame(face_mesh,cap,k)).start()
         stuapp.button3 = customtkinter.CTkButton(
-            frame, text="Start Detecting", command=lambda: self.start_frame(frame)
+            frame1, text="Start Detecting", command=lambda: self.start_frame(mainframe)
         )
         stuapp.button4 = customtkinter.CTkButton(
-            frame, text="Stop Detecting", command=lambda: self.stop_frame()
+            frame1, text="Stop Detecting", command=lambda: self.stop_frame()
         )
-        stuapp.button5 = customtkinter.CTkButton(
-            frame, text="Refresh Connection", command=lambda: self.refresh()
-        )
-
+        #stuapp.button5 = customtkinter.CTkButton(
+        #    frame, text="Refresh Connection", command=lambda: self.press
+        #)
+        available_ports,working_ports,non_working_ports = list_ports()
+        print(available_ports,working_ports,non_working_ports)
+        #self.optionmenu_var = customtkinter.StringVar(value=working_ports[0])
+        ports = [str(x) for x in working_ports]
+        self.optionmenu = customtkinter.CTkOptionMenu(frame1, values=ports, command=self.press )#, variable=self.optionmenu_var)
+        
         # add camera output, detect and select camera
         # status check
         # detect and connect to client
 
         # Grid Placement
-        frame.pack(pady=10)
+        mainframe.pack(pady=10)
+        frame.grid(row=0, column=0,padx=5)
+        frame2.grid(row=0, column=1,padx=5)
+        frame1.grid(row=0, column=2,padx=5)
+        #frame.pack(pady=10)
+        #frame1.pack(pady=5)
 
-        stuapp.label.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
-        stuapp.label1.grid(row=2, column=0,  padx=20, pady=5, sticky="ew")
-        stuapp.button5.grid(row=2, column=1, padx=20, pady=10, sticky="ew")
-        stuapp.button1.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
-        stuapp.button2.grid(row=3, column=1, padx=20, pady=10, sticky="ew")
-        stuapp.button3.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
-        stuapp.button4.grid(row=4, column=1, padx=20, pady=10, sticky="ew")
-        stuapp.grid_columnconfigure((0, 4), weight=1)
-        # stuapp.resizable(False, False)
-        # use working_ports
-        # available_ports,working_ports,non_working_ports = list_ports()
+        #frame
+        stuapp.label.grid(row=0, column=0, columnspan=2 , padx=20, pady=5, sticky="ew")
+        stuapp.label1.grid(row=2, column=0, columnspan=2 , padx=20, pady=5, sticky="ew")
+        #stuapp.button5.grid(row=2, column=1, padx=20, pady=10, sticky="ew")
+        stuapp.button1.grid(row=3, column=0, columnspan=2, padx=20, pady=10, sticky="ew")
+        
+        #frame1
+        stuapp.label3.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
+        stuapp.button3.grid(row=1, column=0, padx=20, pady=10, sticky="ew")
+        stuapp.button4.grid(row=1, column=1, padx=20, pady=10, sticky="ew")
+        stuapp.label2.grid(row=2, column=0,  padx=20, pady=5, sticky="ew")
+        self.optionmenu.grid(row=2, column=1, padx=20, pady=10, sticky="ew")
+
+        #mixed with frame (old ui)
+        #stuapp.button3.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
+        #stuapp.button4.grid(row=4, column=1, padx=20, pady=10, sticky="ew")
+        #stuapp.label2.grid(row=5, column=0,  padx=20, pady=5, sticky="ew")
+        #self.optionmenu.grid(row=5, column=1, padx=20, pady=10, sticky="ew")
 
         
-        self.start_frame(frame)
+        stuapp.grid_columnconfigure((0, 4), weight=1)
+
+        stuapp.button3.invoke()
+        # stuapp.resizable(False, False)
+        # use working_ports
+        
+        #self.start_frame(frame)
         # For webcam input:
         # drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
+    
+    def changesession(self):
+        dialog = customtkinter.CTkInputDialog(text="Input Session name for db record:", title="Session Name")
+        self.session = dialog.get_input()
+    
+    def press(self, a):
+        self.stop_frame()
+        stuapp.button3.invoke()
 
     def serverrun(self, *args):
-        if (not(self.validate())):
+        if (not(self.validatelogin())):
             return
+        self.changesession()
         global handler, serapp, face_mesh, clients
-        t = Thread(target=lambda: self.serverthread())
+        t = Thread(target=lambda: self.serverthread(), daemon = True)
         t.start()
         clients = set()
         self.withdraw()
@@ -333,56 +432,150 @@ class App(customtkinter.CTk):
         serapp.button1 = customtkinter.CTkButton(
             frame, text="Reselect Mode", command=handler
         )
+        serapp.button2 = customtkinter.CTkButton(
+            frame, text="See History", command=self.history
+        )
+        serapp.button3 = customtkinter.CTkButton(
+            frame, text="Change Session", command=self.changesession
+        )
 
         # Grid Placement
         frame.pack(pady=10)
 
         serapp.label.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
         serapp.button1.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
-
+        serapp.button2.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
+        serapp.button3.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
+        self.scrollable = customtkinter.CTkScrollableFrame(serapp, width = 1000)
+        self.scrollable.pack(pady=10)
         #pc1 = ClientPC(serapp)
 
+    def history(self):
+        serapp.iconify()
+        sw = int(serapp.winfo_screenwidth() * 0.6)
+        sh = int(serapp.winfo_screenheight() * 0.7)
+        x = (self.winfo_screenwidth() / 2) - (sw / 2)
+        y = (self.winfo_screenheight() / 2) - (sh / 2)
+        self.histapp = customtkinter.CTkToplevel(serapp)
+        self.histapp.geometry(f"{sw}x{sh}+{x}+{y}")
+
+        # constants
+        width = 900
+        height = 600
+        pdown = 0.05
+        data_screenshot = []
+        label = customtkinter.CTkLabel(self, text="History")
+        onmodify = tkinter.StringVar()
+        tb_search = customtkinter.CTkEntry(self.histapp, textvariable=onmodify)
+        tb_search.place(relx=0.06, rely=0.0305, relheight=0.03, relwidth=0.465)
+        #ch1 = customtkinter.CTkCheckBox(self.histapp, text='ID', variable=var1, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
+        #ch2 = customtkinter.CTkCheckBox(self.histapp, text='Name', variable=var2, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
+        #ch3 = customtkinter.CTkCheckBox(self.histapp, text='Gender', variable=var3, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
+        #ch4 = customtkinter.CTkCheckBox(self.histapp, text='Year', variable=var4, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
+        #ch5 = customtkinter.CTkCheckBox(self.histapp, text='Course', variable=var5, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
+        # building tree view
+        tree_frame = customtkinter.CTkFrame(self.histapp)
+        tree_frame.place(relx=0.01, rely=0.025+pdown, relheight=0.7, relwidth=0.98)
+        tree_scroll = customtkinter.CTkScrollbar(tree_frame)
+        tree_scroll.pack(side="right", fill = "y")
+        my_tree = ttk.Treeview(tree_frame, yscrollcommand=tree_scroll.set)
+        
+        my_tree['columns'] = ("Acct ID", "Session", "Time", "Status", "Student ID")
+        # #0 column is the phantom column, parent-child relationship is not needed thus stretch=NO
+        my_tree.column("#0", width=0, stretch=False)
+        my_tree.column("Acct ID", anchor=tkinter.CENTER, width=40)
+        my_tree.column("Session", anchor=tkinter.W, width=160)
+        my_tree.column("Time", anchor=tkinter.CENTER, width=70)
+        my_tree.column("Status", anchor=tkinter.CENTER, width=70)
+        my_tree.column("Student ID", anchor=tkinter.CENTER, width=70)
+
+        my_tree.heading("#0", text="#", anchor=tkinter.W)
+        my_tree.heading("Acct ID",text="Account ID", anchor=tkinter.CENTER)
+        my_tree.heading("Session", text="Session", anchor=tkinter.W)
+        my_tree.heading("Time", text="Time", anchor=tkinter.CENTER)
+        my_tree.heading("Status", text="Status", anchor=tkinter.CENTER)
+        my_tree.heading("Student ID", text="Student ID", anchor=tkinter.CENTER)
+        my_tree.pack(fill="both")
+        tree_scroll.configure(command=my_tree.yview)
+        filters=[]
+        dbcalls.filltree(my_tree, self.currentuser, "")
+        onmodify.trace("w", lambda name, index, mode: dbcalls.filltree(my_tree, str(tb_search.get())))
+        self.histapp.protocol("WM_DELETE_WINDOW", lambda: self.closehist())
+
+    def closehist(self):
+        self.histapp.withdraw()
+        serapp.deiconify()
+
     def serverthread(self):
-        global th, hostSocket
-        hostSocket = socket(AF_INET, SOCK_STREAM)
-        hostSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR,1)
+        global th
+        self.hostSocket = socket(AF_INET, SOCK_STREAM)
+        self.hostSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR,1)
         hostIp = socket1.gethostbyname(socket1.gethostname())
         gethostname = ""
         portNumber = 5050
-        hostSocket.bind((hostIp, portNumber))
-        hostSocket.listen()
+        #portnumber = int(os.getenv("PL_CREDENTIAL_SERVER_PORT", "55955"))
+        self.hostSocket.bind((hostIp, portNumber))
+        self.hostSocket.listen()
         print ("Waiting for connection...")
         th = threading.current_thread()
         while getattr(th, "do_run", True):
             print("hello")
-            clientSocket, clientAddress = hostSocket.accept()
+            clientSocket, clientAddress = self.hostSocket.accept()
             clients.add(clientSocket)
             print ("Connection established with: ", clientAddress[0] + ":" + str(clientAddress[1]))
-            newframe = ClientPC(serapp, gethostname)
-            thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe))
-            thread.start()
+            if(customtkinter.CTkToplevel.winfo_exists(serapp)==1):
+                newframe = ClientPC(self.scrollable, gethostname)
+                thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe), daemon = True)
+                thread.start()
         
         #it doesnt reach here
+        self.hostSocket.close()
         print("socket down exit loop")
 
 def clientThread(clientSocket, clientAddress, clientframe):
+    newmsg = True
+    fullmsg = ""
+    complete = False
     while True:
-        message = clientSocket.recv(1024).decode("utf-8")
-        print(clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message)
-        if message:
-            if (message[0]=="0"):
-                clientframe.change_name(message[1:])
-        for client in clients:
-            if client is not clientSocket:
-                client.send((clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ message).encode("utf-8"))
+        try:
+            message = clientSocket.recv(1024)
+            if message:
+                if newmsg:
+                    fullmsg = ""
+                    msglen = int(message[:HEADERSIZE])
+                    newmsg = False
+                    complete = False
+                
+                fullmsg += message.decode("utf-8")
 
+                if len(fullmsg)-HEADERSIZE == msglen:
+                    complete = True
+                    fullmsg = fullmsg[HEADERSIZE:]
+                    newmsg=True
+                    print(clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ fullmsg)
+
+                if complete:
+                    if (fullmsg[0]=="0"):
+                        clientframe.change_name(fullmsg[1:])
+                    for client in clients:
+                        if client is not clientSocket:
+                            client.send(pack((clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ fullmsg)).encode("utf-8"))
+        except:
+            print("abrupt disconnect")
+            clients.remove(clientSocket)
+            print(clientAddress[0] + ":" + str(clientAddress[1]) +" disconnected")
+            break
         if not message:
-            clientframe.forget()
             clients.remove(clientSocket)
             print(clientAddress[0] + ":" + str(clientAddress[1]) +" disconnected")
             break
 
+    clientframe.forget()
     clientSocket.close()
+
+def pack(message):
+    message = f'{len(message):<{HEADERSIZE}}' + message
+    return message
 
 def list_ports():
     """
@@ -431,6 +624,8 @@ def showstudent_closetray(stuapp):
     icon.stop()
     stuapp.deiconify()
 
+def clientsrefresh(clients):
+    pass
 
 def startTray(stuapp):
     global icon
