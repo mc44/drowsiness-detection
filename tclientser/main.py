@@ -378,6 +378,7 @@ class App(customtkinter.CTk):
         stuapp.button4.grid(row=1, column=1, padx=20, pady=10, sticky="ew")
         stuapp.label2.grid(row=2, column=0,  padx=20, pady=5, sticky="ew")
         self.optionmenu.grid(row=2, column=1, padx=20, pady=10, sticky="ew")
+        self.optionmenu.set("0")
 
         #mixed with frame (old ui)
         #stuapp.button3.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
