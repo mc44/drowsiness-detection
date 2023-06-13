@@ -22,6 +22,8 @@ import re
 from datetime import datetime
 from pythonping import ping
 import dbcalls
+from notifypy import Notify
+
 HEADERSIZE = 10
 
 def center(win):
@@ -48,6 +50,36 @@ def deicon():
     app.iconify()
     app.deiconify()
 
+def image_resize(image, width = None, height = None, inter = cv2.INTER_AREA):
+    # initialize the dimensions of the image to be resized and
+    # grab the image size
+    dim = None
+    (h, w) = image.shape[:2]
+
+    # if both the width and height are None, then return the
+    # original image
+    if width is None and height is None:
+        return image
+
+    # check to see if the width is None
+    if width is None:
+        # calculate the ratio of the height and construct the
+        # dimensions
+        r = height / float(h)
+        dim = (int(w * r), height)
+
+    # otherwise, the height is None
+    else:
+        # calculate the ratio of the width and construct the
+        # dimensions
+        r = width / float(w)
+        dim = (width, int(h * r))
+
+    # resize the image
+    resized = cv2.resize(image, dim, interpolation = inter)
+
+    # return the resized image
+    return resized
 
 # MAIN
 
@@ -99,6 +131,11 @@ class App(customtkinter.CTk):
         self.grid_columnconfigure((0, 4), weight=1)
         center(self)
         self.resizable(False, False)
+
+        notification = Notify()
+        notification.title = "Welcome to the App"
+        notification.message = "Please select on whether you are a client or a server user!"
+        notification.send()
 
     def validate(self):
         val = re.search("^[\w\d_-]+$", self.entry.get())
@@ -191,9 +228,11 @@ class App(customtkinter.CTk):
         # while cap.isOpened():
         success, image = cap.read()
         try:
+            image = image_resize(image, height = 480)
             image = image[:, :, ::-1]
         except:
             print("imageread")
+            self.run_status = False
 
         # To improve performance, optionally mark the image as not writeable to
         # pass by reference.
@@ -259,8 +298,10 @@ class App(customtkinter.CTk):
         except error:
             print(error)
             print("error connecting, please refresh")
+            return False
 
         self.initiate_frame(frame)    
+        return True
 
         
     def initiate_frame(self,frame):
@@ -270,7 +311,9 @@ class App(customtkinter.CTk):
         cap = cv2.VideoCapture(int(self.optionmenu.get()))
         if not(cap is None or not cap.isOpened()):
             ret, imgframe = cap.read()
+            imgframe = image_resize(imgframe, height = 480)
             imgframe = imgframe[:, :, ::-1]
+            
             image = Image.fromarray(imgframe)
             global photo
             photo = ImageTk.PhotoImage(image)
@@ -289,6 +332,13 @@ class App(customtkinter.CTk):
 
     def clientrun(self, *args):
         if (not(self.validate())):
+            return
+        available_ports,working_ports,non_working_ports = list_ports()
+        print(available_ports,working_ports,non_working_ports)
+        #self.optionmenu_var = customtkinter.StringVar(value=working_ports[0])
+        ports = [str(x) for x in working_ports]
+        if working_ports==[]:
+            messagebox.showwarning(title="No camera detected", message="Please make sure that a camera is available for use.")
             return
         global handler, stuapp, face_mesh
         self.withdraw()
@@ -348,10 +398,7 @@ class App(customtkinter.CTk):
         #stuapp.button5 = customtkinter.CTkButton(
         #    frame, text="Refresh Connection", command=lambda: self.press
         #)
-        available_ports,working_ports,non_working_ports = list_ports()
-        print(available_ports,working_ports,non_working_ports)
-        #self.optionmenu_var = customtkinter.StringVar(value=working_ports[0])
-        ports = [str(x) for x in working_ports]
+        
         self.optionmenu = customtkinter.CTkOptionMenu(frame1, values=ports, command=self.press )#, variable=self.optionmenu_var)
         
         # add camera output, detect and select camera
@@ -389,7 +436,10 @@ class App(customtkinter.CTk):
         
         stuapp.grid_columnconfigure((0, 4), weight=1)
 
-        stuapp.button3.invoke()
+        check = stuapp.button3.invoke()
+        if not check:
+            messagebox.showwarning(title="Can't find Server", message="Please make sure that a server application is running on the network, or you are connected to the same network.")
+            self.onCloseOtherFrame(stuapp)
         # stuapp.resizable(False, False)
         # use working_ports
         
@@ -444,12 +494,12 @@ class App(customtkinter.CTk):
         frame.pack(pady=10)
 
         serapp.label.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
-        serapp.button1.grid(row=2, column=0, padx=20, pady=10, sticky="ew")
+        serapp.button1.grid(row=2, column=0, columnspan=2, padx=20, pady=10, sticky="ew")
         serapp.button2.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
-        serapp.button3.grid(row=4, column=0, padx=20, pady=10, sticky="ew")
-        self.scrollable = customtkinter.CTkScrollableFrame(serapp, width = 1000)
+        serapp.button3.grid(row=3, column=1, padx=20, pady=10, sticky="ew")
+        self.scrollable = customtkinter.CTkScrollableFrame(serapp, width = 1000, height=700)
         self.scrollable.pack(pady=10)
-        #pc1 = ClientPC(serapp)
+        pc1 = ClientPC(self.scrollable, "testasdasdasdasdasdsad")
 
     def history(self):
         serapp.iconify()
@@ -648,6 +698,7 @@ class ClientPC(customtkinter.CTkFrame):
         super().__init__(parent)
         # Initialize
         # self.frame.grid_propagate(False)
+        self.configure(width=300)
         self.label = customtkinter.CTkLabel(
             self, text=f"PC ID: {name}", text_color="white"
         )
@@ -663,12 +714,18 @@ class ClientPC(customtkinter.CTkFrame):
         # Grid Placement
         self.pack(pady=10)
 
-        self.label.grid(row=0, column=0, columnspan = 2, padx=20, pady=5, sticky="ew")
-        self.label1.grid(row=0, column=2, padx=20, pady=5, sticky="ew")
+        self.img = ImageTk.PhotoImage(Image.open("./images/pc_green.png"))
+        self.canvas = tkinter.Canvas(self, width=self.img.width(), height=self.img.height())
+        self.canvas.grid(row=0, column=0,padx=5,pady=5)
+        self.canvas.create_image(5, 5, image=self.img, anchor="nw")
+        self.label.grid(row=0, column=1, columnspan = 2, padx=20, pady=5, sticky="ew")
+        self.label1.grid(row=0, column=3, padx=20, pady=5, sticky="ew")
         #button.grid(row=0, column=2, padx=20, pady=10, sticky="ew")
-        self.button1.grid(row=0, column=3, padx=20, pady=10, sticky="ew")
+        self.button1.grid(row=0, column=4, padx=20, pady=10, sticky="ew")
         #grid_columnconfigure((0, 3), weight=1)
         self.normal()
+        
+        
 
     def forget(self):
         self.label.destroy()
@@ -682,12 +739,15 @@ class ClientPC(customtkinter.CTkFrame):
         self.normal()
     
     def normal(self):
+        self.img.paste(Image.open("./images/pc_green.png"))
         self.configure(border_color="green", border_width=1)
 
     def no_face(self):
+        self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="yellow", border_width=1)
     
     def drowsy(self):
+        self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="red", border_width=1)
 
 
