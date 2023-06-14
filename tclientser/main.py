@@ -287,11 +287,12 @@ class App(customtkinter.CTk):
         self.run_status = False
         global ip
         try: 
-            ip = socket1.gethostbyname(socket1.gethostname())
+            server_ip = discover_server_ip()
+            #ip = socket1.gethostbyname(socket1.gethostname())
             port = 5050
         
             self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
-            self.server.connect((ip, port))
+            self.server.connect((server_ip, port))
             self.server.send(bytes(pack("0"+str(self.entry.get())), "utf-8"))
             stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
             print(ping(ip, verbose=True))
@@ -435,7 +436,6 @@ class App(customtkinter.CTk):
 
         
         stuapp.grid_columnconfigure((0, 4), weight=1)
-
         check = stuapp.button3.invoke()
         if not check:
             messagebox.showwarning(title="Can't find Server", message="Please make sure that a server application is running on the network, or you are connected to the same network.")
@@ -561,7 +561,9 @@ class App(customtkinter.CTk):
         global th
         self.hostSocket = socket(AF_INET, SOCK_STREAM)
         self.hostSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR,1)
-        hostIp = socket1.gethostbyname(socket1.gethostname())
+        hostIp = "0.0.0.0"
+        ip = socket1.gethostbyname(socket1.gethostname())
+        print(ip)
         gethostname = ""
         portNumber = 5050
         #portnumber = int(os.getenv("PL_CREDENTIAL_SERVER_PORT", "55955"))
@@ -572,9 +574,15 @@ class App(customtkinter.CTk):
         while getattr(th, "do_run", True):
             print("hello")
             clientSocket, clientAddress = self.hostSocket.accept()
-            clients.add(clientSocket)
             print ("Connection established with: ", clientAddress[0] + ":" + str(clientAddress[1]))
-            if(customtkinter.CTkToplevel.winfo_exists(serapp)==1):
+             # Receive data from the client
+            data = clientSocket.recv(1024).decode()
+            if data == "DiscoverServer":
+                # Broadcast response to client
+                clientSocket.send(ip.encode())
+                clientSocket.close()
+            elif(customtkinter.CTkToplevel.winfo_exists(serapp)==1):
+                clients.add(clientSocket)
                 newframe = ClientPC(self.scrollable, gethostname)
                 thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe), daemon = True)
                 thread.start()
@@ -692,6 +700,55 @@ def startTray(stuapp):
         ),
     )
     icon.run()
+
+import time
+def discover_server_ip():
+    # Set the broadcast address and port
+    broadcast_address = '255.255.255.255'
+    port = 12345
+
+    # Create a UDP socket
+    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+    try:
+        # Enable broadcasting mode
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        sock.bind(('', port))
+
+        # Send a broadcast message
+        message = b"DiscoverServer"
+        sock.sendto(message, (broadcast_address, port))
+
+        # Listen for responses for 5 seconds
+        sock.settimeout(5)
+        start_time = time.time()
+
+        while time.time() - start_time < 5:
+            try:
+                # Receive response
+                data, address = sock.recvfrom(1024)
+
+                # Check if the response is from the server
+                if data == b"ServerResponse":
+                    return address[0]
+
+            except socket.timeout:
+                # Timeout occurred, no more responses expected
+                break
+
+    except socket.error:
+        # Error handling
+        print("Error occurred while discovering the server.")
+        return None
+
+    finally:
+        # Close the socket
+        sock.close()
+
+    print("Server not found.")
+    return None
+
 
 class ClientPC(customtkinter.CTkFrame):
     def __init__(self, parent, name):
