@@ -23,6 +23,12 @@ from datetime import datetime
 from pythonping import ping
 import dbcalls
 from notifypy import Notify
+import getmodelverdict
+
+right_eye_landmarks = [33, 246, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
+left_eye_landmarks = [362, 382, 381, 380, 374, 373, 390, 249, 466, 388, 387, 386, 385, 384, 398]
+mouth_landmarks = [13, 14, 312, 317, 82, 87, 178, 402, 311, 81, 88, 95, 183, 42, 78, 318, 310, 324, 415, 308]
+framecount = 1500
 
 HEADERSIZE = 10
 
@@ -97,7 +103,7 @@ class App(customtkinter.CTk):
         customtkinter.set_appearance_mode("dark")
         # self.app = customtkinter.CTk()
         self.screen_width = int(self.winfo_screenwidth() * 0.3)
-        self.screen_height = int(self.winfo_screenheight() * 0.2)
+        self.screen_height = int(self.winfo_screenheight() * 0.25)
         self.eval("tk::PlaceWindow . center")
         self.geometry(f"{self.screen_width}x{self.screen_height}")
         # self.app.grid_columnconfigure(0, weight=1)
@@ -121,7 +127,7 @@ class App(customtkinter.CTk):
         self.button1 = customtkinter.CTkButton(frame, text="Server", command=self.serverrun)
 
         # Grid Placement
-        frame.pack(pady=10)
+        frame.pack(pady=30)
 
         self.label.grid(row=0, column=0, columnspan = 2, padx=20, pady=5, sticky="ew")
         self.label1.grid(row=1, column=0, padx=20, pady=5, sticky="ew")
@@ -179,7 +185,7 @@ class App(customtkinter.CTk):
     def inputserver_ip(self):
         dialog = customtkinter.CTkInputDialog(text="Input server private IP:", title="Ask for the server ip")
         self.server_ip = dialog.get_input()
-        val = re.search("^[\w\d_-]+$", self.server_ip)
+        val = re.search("^((25[0-5]|(2[0-4]|1\d|[1-9]|)\d).){3}(25[0-5]|(2[0-4]|1\d|[1-9]|)\d)$", self.server_ip)
         #print(self.entry.get(), val)
         if (val is None):
             messagebox.showwarning(title="No input", message="Please input the server ip. Thanks")
@@ -236,7 +242,7 @@ class App(customtkinter.CTk):
             print(error)
             print("error connecting, please refresh")
 
-    def update_frame(self, face_mesh, cap, k):
+    def update_frame(self, face_mesh, cap, k, frames):
         # while cap.isOpened():
         success, image = cap.read()
         try:
@@ -245,40 +251,38 @@ class App(customtkinter.CTk):
         except:
             print("imageread")
             self.run_status = False
-
+        height = image.shape[0]
+        width = image.shape[1]
         # To improve performance, optionally mark the image as not writeable to
         # pass by reference.
         image.flags.writeable = False
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = face_mesh.process(image)
+        lm_coord = []
+        if results.multi_face_landmarks:
+            for facial_landmarks in results.multi_face_landmarks:
+                landmarks = facial_landmarks.landmark
+                for landmark in landmarks:
+                    x = landmark.x
+                    y = landmark.y
+                    z = landmark.z
 
+                cv2.circle(image, (int(landmark.x * width), int(landmark.y * height)), 2, (100,100,0), -1)
+                lm_coord.append([x, y])
+            frames.append(lm_coord)
+        #model process
+        #frame_coordinates = getmodelverdict.ExtractEyeAndMouthLandmarks(results, False)
+        #frames.append(frame_coordinates)
+        if len(frames)%100 == 0:
+            print(len)
+        if len(frames)>framecount:
+            getmodelverdict.modelpredict(frames)
+            frames = []
         # Draw the face mesh annotations on the image.
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-        if results.multi_face_landmarks:
-            for face_landmarks in results.multi_face_landmarks:
-                mp_drawing.draw_landmarks(
-                    image=image,
-                    landmark_list=face_landmarks,
-                    connections=mp_face_mesh.FACEMESH_TESSELATION,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_tesselation_style(),
-                )
-                mp_drawing.draw_landmarks(
-                    image=image,
-                    landmark_list=face_landmarks,
-                    connections=mp_face_mesh.FACEMESH_CONTOURS,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_contours_style(),
-                )
-                mp_drawing.draw_landmarks(
-                    image=image,
-                    landmark_list=face_landmarks,
-                    connections=mp_face_mesh.FACEMESH_IRISES,
-                    landmark_drawing_spec=None,
-                    connection_drawing_spec=mp_drawing_styles.get_default_face_mesh_iris_connections_style(),
-                )
-        # Flip the image horizontally for a selfie-view display.
+
+        
         mesh_image = cv2.flip(image, 1)
         image = Image.fromarray(mesh_image)
         self.update_gui(image)
@@ -300,6 +304,7 @@ class App(customtkinter.CTk):
         global ip
         try: 
             server_ip = self.server_ip
+            print(server_ip)
             #ip = socket1.gethostbyname(socket1.gethostname())
             port = 5050
         
@@ -334,7 +339,7 @@ class App(customtkinter.CTk):
             canvas.grid(row=2, column=0, columnspan=3)
             canvas.create_image((0, 0), image=photo, anchor="nw")
             self.run_status = True
-            stuapp.after(2, lambda: self.update_frame(face_mesh, cap, 1))
+            stuapp.after(2, lambda: self.update_frame(face_mesh, cap, 1, []))
 
     def stop_frame(self):
         try:
@@ -461,9 +466,11 @@ class App(customtkinter.CTk):
         # For webcam input:
         # drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
     
-    def changesession(self):
+    def changesession(self,serapp=""):
         dialog = customtkinter.CTkInputDialog(text="Input Session name for db record:", title="Session Name")
         self.session = dialog.get_input()
+        if serapp!="":
+            serapp.label2.configure(text=f"Current Session: {self.session}")
     
     def press(self, a):
         self.stop_frame()
@@ -472,8 +479,8 @@ class App(customtkinter.CTk):
     def serverrun(self, *args):
         if (not(self.validatelogin())):
             return
-        self.changesession()
         global handler, serapp, face_mesh, clients
+        self.changesession()
         t = Thread(target=lambda: self.serverthread(), daemon = True)
         t.start()
         clients = set()
@@ -492,7 +499,13 @@ class App(customtkinter.CTk):
         )
 
         serapp.label = customtkinter.CTkLabel(
-            frame, text=f"Server Dashboard: {self.entry.get()}", text_color="white"
+            frame, text=f"User: {self.entry.get()}", text_color="white"
+        )
+        serapp.label1 = customtkinter.CTkLabel(
+            frame, text=f"Current Ip: {socket1.gethostbyname(socket1.gethostname())}", text_color="white"
+        )
+        serapp.label2 = customtkinter.CTkLabel(
+            frame, text=f"Current Session: {self.session}", text_color="white"
         )
         serapp.button1 = customtkinter.CTkButton(
             frame, text="Reselect Mode", command=handler
@@ -501,16 +514,18 @@ class App(customtkinter.CTk):
             frame, text="See History", command=self.history
         )
         serapp.button3 = customtkinter.CTkButton(
-            frame, text="Change Session", command=self.changesession
+            frame, text="Change Session", command=lambda:self.changesession(serapp)
         )
 
         # Grid Placement
         frame.pack(pady=10)
 
-        serapp.label.grid(row=0, column=0, columnspan=2, padx=20, pady=5, sticky="ew")
-        serapp.button1.grid(row=2, column=0, columnspan=2, padx=20, pady=10, sticky="ew")
-        serapp.button2.grid(row=3, column=0, padx=20, pady=10, sticky="ew")
+        serapp.label.grid(row=0, column=0, padx=20, pady=5, sticky="ew")
+        serapp.label1.grid(row=0, column=1, padx=20, pady=5, sticky="ew")
+        serapp.button1.grid(row=1, column=0, columnspan=2, padx=20, pady=10, sticky="ew")
+        serapp.button2.grid(row=2, column=0, columnspan=2, padx=20, pady=10, sticky="ew")
         serapp.button3.grid(row=3, column=1, padx=20, pady=10, sticky="ew")
+        serapp.label2.grid(row=3, column=0, padx=20, pady=5, sticky="ew")
         self.scrollable = customtkinter.CTkScrollableFrame(serapp, width = 1000, height=700)
         self.scrollable.pack(pady=10)
         pc1 = ClientPC(self.scrollable, "testasdasdasdasdasdsad")
@@ -522,6 +537,7 @@ class App(customtkinter.CTk):
         x = (self.winfo_screenwidth() / 2) - (sw / 2)
         y = (self.winfo_screenheight() / 2) - (sh / 2)
         self.histapp = customtkinter.CTkToplevel(serapp)
+        self.histapp.title("History")
         self.histapp.geometry(f"{sw}x{sh}+{x}+{y}")
 
         # constants
@@ -568,7 +584,8 @@ class App(customtkinter.CTk):
         self.histapp.protocol("WM_DELETE_WINDOW", lambda: self.closehist())
 
     def closehist(self):
-        self.histapp.withdraw()
+        self.histapp.destroy()
+        serapp.iconify()
         serapp.deiconify()
 
     def serverthread(self):
