@@ -175,6 +175,18 @@ class App(customtkinter.CTk):
                 dbcalls.register(self.entry.get(), text)
                 return True
         return False
+    
+    def inputserver_ip(self):
+        dialog = customtkinter.CTkInputDialog(text="Input server private IP:", title="Ask for the server ip")
+        self.server_ip = dialog.get_input()
+        val = re.search("^[\w\d_-]+$", self.server_ip)
+        #print(self.entry.get(), val)
+        if (val is None):
+            messagebox.showwarning(title="No input", message="Please input the server ip. Thanks")
+            return False
+        else:
+            self.currentuser = self.entry.get()
+            return True
 
     def onCloseOtherFrame(self, otherFrame):
         # cap.release()
@@ -287,7 +299,7 @@ class App(customtkinter.CTk):
         self.run_status = False
         global ip
         try: 
-            server_ip = discover_server_ip()
+            server_ip = self.server_ip
             #ip = socket1.gethostbyname(socket1.gethostname())
             port = 5050
         
@@ -333,6 +345,8 @@ class App(customtkinter.CTk):
 
     def clientrun(self, *args):
         if (not(self.validate())):
+            return
+        if (not(self.inputserver_ip())):
             return
         available_ports,working_ports,non_working_ports = list_ports()
         print(available_ports,working_ports,non_working_ports)
