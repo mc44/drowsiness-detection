@@ -4,6 +4,7 @@ import numpy as np
 import os
 import csv
 from keras.models import load_model
+HEADERSIZE = 10
 
 def ExtractEyeAndMouthLandmarks(face_mesh, is3d):
         right_eye_landmarks = [33, 246, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
@@ -30,16 +31,24 @@ def write_list_to_file(file_name, data_list):
         for item in data_list:
             file.write(str(item) + '\n')
 
-def modelpredict(coordinates):
+def pack(message):
+    message = f'{len(message):<{HEADERSIZE}}' + message
+    return message
+
+def modelpredict(coordinates, app):
     #coordinates to numpy
     narray = np.array([coordinates]).reshape(1, len(coordinates), -1)
-    write_list_to_file("output.txt", coordinates)
+    #write_list_to_file("output.txt", coordinates)
 
-    model = load_model('model.h5')
+    model = load_model('gru_model.h5', compile=False)
 
-    model.compile(loss='categorical_crossentropy',
-                optimizer='adam',
-                metrics=['accuracy'])
     
     result = model.predict(narray)
+    predicted_class = np.argmax(result)
+
+    labels = ['Not Drowsy', 'Drowsy']
+    verdict = labels[predicted_class]
+
     print(result, "MODEL RESULT")
+    print(verdict, "MODEL RESULT")
+    app.server.send(bytes(pack("1"+str(verdict)), "utf-8"))

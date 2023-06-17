@@ -24,14 +24,18 @@ from pythonping import ping
 import dbcalls
 from notifypy import Notify
 import getmodelverdict
+import sqlite3
 
 right_eye_landmarks = [33, 246, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
 left_eye_landmarks = [362, 382, 381, 380, 374, 373, 390, 249, 466, 388, 387, 386, 385, 384, 398]
 mouth_landmarks = [13, 14, 312, 317, 82, 87, 178, 402, 311, 81, 88, 95, 183, 42, 78, 318, 310, 324, 415, 308]
 framecount = 1500
-
+frame_reset_threshold = 750
+currentstatus = "normal"
 HEADERSIZE = 10
-
+globalqueryqueue = []
+cur_user = ""
+cur_session = ""
 def center(win):
     """
     centers a tkinter window
@@ -202,6 +206,7 @@ class App(customtkinter.CTk):
         if (self.server):
             self.server.close()
         try:
+            commitquery_queue()
             print("do_run to false, stop server thread")
             th.do_run = False
             ip = socket1.gethostbyname(socket1.gethostname())
@@ -242,7 +247,7 @@ class App(customtkinter.CTk):
             print(error)
             print("error connecting, please refresh")
 
-    def update_frame(self, face_mesh, cap, k, frames):
+    def update_frame(self, face_mesh, cap, nofaceframes, frames):
         # while cap.isOpened():
         success, image = cap.read()
         try:
@@ -262,22 +267,36 @@ class App(customtkinter.CTk):
         if results.multi_face_landmarks:
             for facial_landmarks in results.multi_face_landmarks:
                 landmarks = facial_landmarks.landmark
-                for landmark in landmarks:
+                for i, landmark in enumerate(landmarks):
+                    if i not in left_eye_landmarks and i not in right_eye_landmarks and i not in mouth_landmarks:
+                        continue
                     x = landmark.x
                     y = landmark.y
-                    z = landmark.z
 
-                cv2.circle(image, (int(landmark.x * width), int(landmark.y * height)), 2, (100,100,0), -1)
-                lm_coord.append([x, y])
+                    cv2.circle(image, (int(landmark.x * width), int(landmark.y * height)), 2, (100,100,0), -1)
+                    lm_coord.append([x, y])
             frames.append(lm_coord)
+        else:
+            nofaceframes+=1
+            if nofaceframes>=frame_reset_threshold:
+                frames = []
+                nofaceframes = 0
+                self.server.send(bytes(pack("1"+str("no_face")), "utf-8"))
         #model process
         #frame_coordinates = getmodelverdict.ExtractEyeAndMouthLandmarks(results, False)
         #frames.append(frame_coordinates)
         if len(frames)%100 == 0:
-            print(len)
+            print(len(frames))
         if len(frames)>framecount:
-            getmodelverdict.modelpredict(frames)
+            t = Thread(target=lambda: getmodelverdict.modelpredict(frames,self), daemon = True)
+            t.start()
             frames = []
+            end_time = time.time()
+            # Calculate the elapsed time
+            elapsed_time = end_time - self.start_time
+            print(elapsed_time)
+            
+
         # Draw the face mesh annotations on the image.
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
@@ -292,7 +311,7 @@ class App(customtkinter.CTk):
         #make format of things sent
         self.server.send(bytes(pack(str("1result placeholder"+str(datetime.now()))), "utf-8"))
         if self.run_status:
-            stuapp.after(1, lambda: self.update_frame(face_mesh, cap, k))
+            stuapp.after(1, lambda: self.update_frame(face_mesh, cap, nofaceframes, frames))
         else:
             print("loop stopped")
             self.server.send(bytes(pack(str("1camera disconnect"+str(datetime.now()))), "utf-8"))
@@ -312,7 +331,7 @@ class App(customtkinter.CTk):
             self.server.connect((server_ip, port))
             self.server.send(bytes(pack("0"+str(self.entry.get())), "utf-8"))
             stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
-            print(ping(ip, verbose=True))
+            #print(ping(server_ip, verbose=True))
         except error:
             print(error)
             print("error connecting, please refresh")
@@ -339,7 +358,10 @@ class App(customtkinter.CTk):
             canvas.grid(row=2, column=0, columnspan=3)
             canvas.create_image((0, 0), image=photo, anchor="nw")
             self.run_status = True
-            stuapp.after(2, lambda: self.update_frame(face_mesh, cap, 1, []))
+            # Record the start time
+            self.start_time = time.time()
+
+            stuapp.after(2, lambda: self.update_frame(face_mesh, cap, 0, []))
 
     def stop_frame(self):
         try:
@@ -469,6 +491,7 @@ class App(customtkinter.CTk):
     def changesession(self,serapp=""):
         dialog = customtkinter.CTkInputDialog(text="Input Session name for db record:", title="Session Name")
         self.session = dialog.get_input()
+        cur_session = self.session
         if serapp!="":
             serapp.label2.configure(text=f"Current Session: {self.session}")
     
@@ -501,6 +524,7 @@ class App(customtkinter.CTk):
         serapp.label = customtkinter.CTkLabel(
             frame, text=f"User: {self.entry.get()}", text_color="white"
         )
+        cur_user = self.entry.get()
         serapp.label1 = customtkinter.CTkLabel(
             frame, text=f"Current Ip: {socket1.gethostbyname(socket1.gethostname())}", text_color="white"
         )
@@ -647,6 +671,13 @@ def clientThread(clientSocket, clientAddress, clientframe):
                 if complete:
                     if (fullmsg[0]=="0"):
                         clientframe.change_name(fullmsg[1:])
+                    if (fullmsg[0]=="1"):
+                        if fullmsg[1:]=="Not Drowsy":
+                            clientframe.normal()
+                        elif fullmsg[1:]=="no_face":
+                            clientframe.no_face()
+                        elif fullmsg[1:]=="Drowsy":
+                            clientframe.drowsy()
                     for client in clients:
                         if client is not clientSocket:
                             client.send(pack((clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ fullmsg)).encode("utf-8"))
@@ -797,11 +828,10 @@ class ClientPC(customtkinter.CTkFrame):
         self.button = customtkinter.CTkButton(
             self, text="Student", command=print("s")
         )
-        self.button1 = customtkinter.CTkButton(self, text="See History", command=print("s"))
+        #self.button1 = customtkinter.CTkButton(self, text="See History", command=print("s"))
 
         # Grid Placement
         self.pack(pady=10)
-
         self.img = ImageTk.PhotoImage(Image.open("./images/pc_green.png"))
         self.canvas = tkinter.Canvas(self, width=self.img.width(), height=self.img.height())
         self.canvas.grid(row=0, column=0,padx=5,pady=5)
@@ -809,8 +839,10 @@ class ClientPC(customtkinter.CTkFrame):
         self.label.grid(row=0, column=1, columnspan = 2, padx=20, pady=5, sticky="ew")
         self.label1.grid(row=0, column=3, padx=20, pady=5, sticky="ew")
         #button.grid(row=0, column=2, padx=20, pady=10, sticky="ew")
-        self.button1.grid(row=0, column=4, padx=20, pady=10, sticky="ew")
+        #self.button1.grid(row=0, column=4, padx=20, pady=10, sticky="ew")
         #grid_columnconfigure((0, 3), weight=1)
+        self.name = ""
+        self.status = ""
         self.normal()
         
         
@@ -824,20 +856,42 @@ class ClientPC(customtkinter.CTkFrame):
     
     def change_name(self,name):
         self.label.configure(text=f"PC ID: {name}")
-        self.normal()
+        self.name = name
+        #self.normal()
     
     def normal(self):
+        if self.status!="normal":
+            dbrequest(self.name,time.time(),"normal")
         self.img.paste(Image.open("./images/pc_green.png"))
         self.configure(border_color="green", border_width=1)
 
     def no_face(self):
+        if self.status!="no_face":
+            dbrequest(self.name,time.time(),"no_face")
         self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="yellow", border_width=1)
     
     def drowsy(self):
+        if self.status!="drowsy":
+            dbrequest(self.name,time.time(),"drowsy")
         self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="red", border_width=1)
 
+def dbrequest(name,time,status):
+    conn = sqlite3.connect("db.db")
+    id = conn.execute("SELECT ID FROM Account WHERE Name='{}'".format(cur_user)).fetchall()
+    conn.close()
+    query = f"INSERT INTO History (Acct ID, Session, Time, Status, Student ID) VALUES ('{id[0]}','{cur_session}','{time}','{status}','{name}')"
+    globalqueryqueue.append(query)
+
+def commitquery_queue():
+    db=sqlite3.connect('db.db')
+    while len(globalqueryqueue)>0:
+        query = globalqueryqueue.pop()
+        db.execute(query)
+    db.commit()
+    print("committ success")
+    db.close()
 
 if __name__ == "__main__":
     global app
