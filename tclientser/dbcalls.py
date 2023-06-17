@@ -62,6 +62,27 @@ def get(table, items, condition = ""):
     db.close()
     return values
 
+def getdistinct(table, items, condition = ""):
+    db=sqlite3.connect('db.db')
+    shop_list = ""
+    for item in items:
+        shop_list += item + ", "
+    shop_list = shop_list[:len(shop_list)-2]
+    query = f"SELECT DISTINCT {shop_list} FROM {table} " + condition
+    #print(query)
+    values = None
+    try:
+        values=db.execute(query).fetchall()
+    except Exception as e:
+        print ("error", e)
+        db.rollback()
+    db.close()
+    repack = []
+    if values:
+        for val in values:
+            repack.append(val[0])
+    return repack
+
 def add_status(table, items):
     #items for student
     db=sqlite3.connect('db.db')
@@ -80,17 +101,22 @@ def add_status(table, items):
     db.close()
     return values
 
-def filltree(my_tree, user, searchlimiter=""):
+def filltree(my_tree, user, check_var, searchlimiter=""):
+    
     my_tree.delete(*my_tree.get_children())
     conn = sqlite3.connect("db.db")
-    data = conn.execute("SELECT a.ID,a.AcctID,a.Session,a.Time,a.Status,a.StudentID FROM History a INNER JOIN Account b ON a.AcctID = b.ID WHERE b.Name='{}'".format(user)).fetchall()
+    if check_var=="All":
+        query="SELECT a.ID,a.AcctID,a.Session,a.Time,a.Status,a.StudentID FROM History a INNER JOIN Account b ON a.AcctID = b.ID WHERE b.Name='{}'".format(user)
+    else:
+        query="SELECT a.ID,a.AcctID,a.Session,a.Time,a.Status,a.StudentID FROM History a INNER JOIN Account b ON a.AcctID = b.ID WHERE b.Name='{}' AND a.session='{}'".format(user,check_var)
+    data = conn.execute(query).fetchall()
     conn.close()
     #varlist = [var1.get(), var2.get(), var3.get(), var4.get(), var5.get()]
     iid = 1
     for line in data:
+        if line[3]:
+            date1 = datetime.datetime.fromtimestamp(line[3]/1000.0)
         if searchlimiter == "": #or varlist == [0, 0, 0, 0, 0]:
-            if line[3]:
-                date1 = datetime.datetime.fromtimestamp(line[3]/1000.0)
             my_tree.insert(parent='', index='end', iid=iid, text="", values=(line[1], line[2], date1, line[4],  line[5]))
         else:
             text=""

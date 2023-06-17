@@ -208,6 +208,7 @@ class App(customtkinter.CTk):
         if (self.server):
             self.server.close()
         try:
+            global global_stop
             global_stop = True
             commitquery_queue()
             print("do_run to false, stop server thread")
@@ -312,7 +313,7 @@ class App(customtkinter.CTk):
         #k += 1
         #decide result here
         #make format of things sent
-        self.server.send(bytes(pack(str("1result placeholder"+str(datetime.now()))), "utf-8"))
+        #self.server.send(bytes(pack(str("1result placeholder"+str(datetime.now()))), "utf-8"))
         if self.run_status:
             stuapp.after(1, lambda: self.update_frame(face_mesh, cap, nofaceframes, frames))
         else:
@@ -565,6 +566,9 @@ class App(customtkinter.CTk):
         #pc4 = ClientPC(self.scrollable, "zxc")
         runsql_forinterval(serapp)
 
+    def calltree(self, my_tree, user, search):
+        dbcalls.filltree(my_tree,user,self.optionmenu.get(),search)
+
     def history(self):
         serapp.iconify()
         sw = int(serapp.winfo_screenwidth() * 0.6)
@@ -578,12 +582,19 @@ class App(customtkinter.CTk):
         # constants
         width = 900
         height = 600
-        pdown = 0.05
+        pdown = 0.07
         data_screenshot = []
         label = customtkinter.CTkLabel(self, text="History")
         onmodify = tkinter.StringVar()
         tb_search = customtkinter.CTkEntry(self.histapp, textvariable=onmodify)
         tb_search.place(relx=0.06, rely=0.0305, relheight=0.03, relwidth=0.465)
+        global cur_user
+        id = dbcalls.get("Account", ["ID"], f"WHERE Name='{cur_user}'")
+        sessions = dbcalls.getdistinct("History", ["Session"], f"WHERE AcctID='{id[0][0]}'")
+        sessions.insert(0,"All")
+        self.optionmenu = customtkinter.CTkOptionMenu(self.histapp, values=sessions, command=lambda a: self.calltree(my_tree, self.currentuser, str(tb_search.get())))#, variable=self.optionmenu_var)
+        self.optionmenu.set("All")
+        self.optionmenu.place(relx=0.55, rely=0.0295)
         #ch1 = customtkinter.CTkCheckBox(self.histapp, text='ID', variable=var1, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
         #ch2 = customtkinter.CTkCheckBox(self.histapp, text='Name', variable=var2, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
         #ch3 = customtkinter.CTkCheckBox(self.histapp, text='Gender', variable=var3, onvalue=1, offvalue=0, command=lambda: filltree(str(tb_search.get())))
@@ -611,11 +622,11 @@ class App(customtkinter.CTk):
         my_tree.heading("Time", text="Time", anchor=tkinter.CENTER)
         my_tree.heading("Status", text="Status", anchor=tkinter.CENTER)
         my_tree.heading("Student ID", text="Student ID", anchor=tkinter.CENTER)
-        my_tree.pack(fill="both")
+        my_tree.pack(fill="both", expand=True)
         tree_scroll.configure(command=my_tree.yview)
         filters=[]
-        dbcalls.filltree(my_tree, self.currentuser, "")
-        onmodify.trace("w", lambda name, index, mode: dbcalls.filltree(my_tree, str(tb_search.get())))
+        dbcalls.filltree(my_tree, self.currentuser,self.optionmenu.get(), "")
+        onmodify.trace("w", lambda name, index, mode: dbcalls.filltree(my_tree, self.currentuser, self.optionmenu.get(), str(tb_search.get())))
         self.histapp.protocol("WM_DELETE_WINDOW", lambda: self.closehist())
 
     def closehist(self):
@@ -643,11 +654,15 @@ class App(customtkinter.CTk):
             print ("Connection established with: ", clientAddress[0] + ":" + str(clientAddress[1]))
              # Receive data from the client
             data = clientSocket.recv(1024).decode()
+            #print(data,"here")
             if data == "DiscoverServer":
                 # Broadcast response to client
                 clientSocket.send(ip.encode())
                 clientSocket.close()
             elif(customtkinter.CTkToplevel.winfo_exists(serapp)==1):
+                fullmsg = data[HEADERSIZE:]
+                if fullmsg[0]=="0":
+                    gethostname=fullmsg[1:]
                 clients.add(clientSocket)
                 newframe = ClientPC(self.scrollable, gethostname)
                 thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe), daemon = True)
@@ -680,6 +695,7 @@ def clientThread(clientSocket, clientAddress, clientframe):
                     print(clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ fullmsg)
 
                 if complete:
+                    #print(fullmsg, "complete")
                     if (fullmsg[0]=="0"):
                         clientframe.change_name(fullmsg[1:])
                     if (fullmsg[0]=="1"):
@@ -786,7 +802,7 @@ class ClientPC(customtkinter.CTkFrame):
             self, text=f"PC ID: {name}", text_color="white"
         )
         self.label1 = customtkinter.CTkLabel(
-            self, text=f"Status: ", text_color="white"
+            self, text=f"Status: Not Drowsy", text_color="white"
         )
 
         self.button = customtkinter.CTkButton(
@@ -814,32 +830,36 @@ class ClientPC(customtkinter.CTkFrame):
     def forget(self):
         self.label.destroy()
         self.label1.destroy()
-        self.button1.destroy()
+        self.button.destroy()
         self.destroy()
         print("frame removed")
     
     def change_name(self,name):
         self.label.configure(text=f"PC ID: {name}")
         self.name = name
+        print(self.name,name)
         #self.normal()
     
     def normal(self):
         if self.status!="normal":
-            dbrequest(self.name,time.time(),"normal")
+            dbrequest(self.name,time.time()*1000,"normal")
         self.img.paste(Image.open("./images/pc_green.png"))
         self.configure(border_color="green", border_width=1)
+        self.label1.configure(text=f"Status: Not Drowsy")
 
     def no_face(self):
         if self.status!="no_face":
-            dbrequest(self.name,time.time(),"no_face")
+            dbrequest(self.name,time.time()*1000,"no_face")
         self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="yellow", border_width=1)
+        self.label1.configure(text=f"Status: No Face   ")
     
     def drowsy(self):
         if self.status!="drowsy":
-            dbrequest(self.name,time.time(),"drowsy")
+            dbrequest(self.name,time.time()*1000,"drowsy")
         self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="red", border_width=1)
+        self.label1.configure(text=f"Status: Drowsy    ")
 
 def dbrequest(name,time,status):
     global cur_user, cur_session, globalqueryqueue
@@ -874,7 +894,7 @@ def commitquery_queue():
     db.close()
 
 def runsql_forinterval(serapp):
-    global stuapp
+    global stuapp, global_stop
     if not global_stop:
         commitquery_queue()
         serapp.after(120000, lambda: runsql_forinterval(serapp))
