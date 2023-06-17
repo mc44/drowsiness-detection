@@ -30,7 +30,7 @@ right_eye_landmarks = [33, 246, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145
 left_eye_landmarks = [362, 382, 381, 380, 374, 373, 390, 249, 466, 388, 387, 386, 385, 384, 398]
 mouth_landmarks = [13, 14, 312, 317, 82, 87, 178, 402, 311, 81, 88, 95, 183, 42, 78, 318, 310, 324, 415, 308]
 framecount = 1500
-frame_reset_threshold = 750
+frame_reset_threshold = 900
 currentstatus = "normal"
 HEADERSIZE = 10
 globalqueryqueue = []
@@ -108,8 +108,8 @@ class App(customtkinter.CTk):
         customtkinter.set_default_color_theme("dark-blue")
         customtkinter.set_appearance_mode("dark")
         # self.app = customtkinter.CTk()
-        self.screen_width = int(self.winfo_screenwidth() * 0.3)
-        self.screen_height = int(self.winfo_screenheight() * 0.25)
+        self.screen_width = int(self.winfo_screenwidth() * 0.5)
+        self.screen_height = int(self.winfo_screenheight() * 0.4)
         self.eval("tk::PlaceWindow . center")
         self.geometry(f"{self.screen_width}x{self.screen_height}")
         # self.app.grid_columnconfigure(0, weight=1)
@@ -393,11 +393,11 @@ class App(customtkinter.CTk):
         stuapp.title("Student Client")
         handler = lambda: self.onCloseOtherFrame(stuapp)
         stuapp.protocol("WM_DELETE_WINDOW", handler)
-        sw = int(stuapp.winfo_screenwidth() * 0.5)
-        sh = int(stuapp.winfo_screenheight() * 0.7)
-        x = (self.winfo_screenwidth() / 2) - (sw / 2)
-        y = (self.winfo_screenheight() / 2) - (sh / 2)
-        stuapp.geometry(f"{sw}x{sh}+{x}+{y}")
+        self.sw = int(stuapp.winfo_screenwidth() * 0.8)
+        self.sh = int(stuapp.winfo_screenheight() * 0.9)
+        x = (self.winfo_screenwidth() / 2) - (self.sw / 2)
+        y = (self.winfo_screenheight() / 2) - (self.sh / 2)
+        stuapp.geometry(f"{self.sw}x{self.sh}+{x}+{y}")
         # Initialize
         mainframe = customtkinter.CTkFrame(
             stuapp, width=self.screen_width, height=self.screen_height
@@ -824,6 +824,10 @@ class ClientPC(customtkinter.CTkFrame):
         self.name = name
         self.status = ""
         self.normal()
+        self.notification = Notify()
+        self.notification.title = "Status Detection"
+        self.notification.message = ""
+        #self.notification.send()
         
         
 
@@ -850,6 +854,8 @@ class ClientPC(customtkinter.CTkFrame):
     def no_face(self):
         if self.status!="no_face":
             dbrequest(self.name,time.time()*1000,"no_face")
+            self.notification.message = f"No face detected for {frame_reset_threshold/30} seconds"
+            self.notification.send()
         self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="yellow", border_width=1)
         self.label1.configure(text=f"Status: No Face   ")
@@ -857,6 +863,8 @@ class ClientPC(customtkinter.CTkFrame):
     def drowsy(self):
         if self.status!="drowsy":
             dbrequest(self.name,time.time()*1000,"drowsy")
+            self.notification.message = f"Are you alright? The model thinks your drowsy"
+            self.notification.send()
         self.img.paste(Image.open("./images/pc_red.png"))
         self.configure(border_color="red", border_width=1)
         self.label1.configure(text=f"Status: Drowsy    ")
