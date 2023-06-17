@@ -36,6 +36,8 @@ HEADERSIZE = 10
 globalqueryqueue = []
 cur_user = ""
 cur_session = ""
+global_stop = False
+
 def center(win):
     """
     centers a tkinter window
@@ -206,6 +208,7 @@ class App(customtkinter.CTk):
         if (self.server):
             self.server.close()
         try:
+            global_stop = True
             commitquery_queue()
             print("do_run to false, stop server thread")
             th.do_run = False
@@ -314,7 +317,7 @@ class App(customtkinter.CTk):
             stuapp.after(1, lambda: self.update_frame(face_mesh, cap, nofaceframes, frames))
         else:
             print("loop stopped")
-            self.server.send(bytes(pack(str("1camera disconnect"+str(datetime.now()))), "utf-8"))
+            #self.server.send(bytes(pack(str("1camera disconnect"+str(datetime.now()))), "utf-8"))
 
 
     def start_frame(self, frame):
@@ -489,6 +492,7 @@ class App(customtkinter.CTk):
         # drawing_spec = mp_drawing.DrawingSpec(thickness=1, circle_radius=1)
     
     def changesession(self,serapp=""):
+        global cur_session
         dialog = customtkinter.CTkInputDialog(text="Input Session name for db record:", title="Session Name")
         self.session = dialog.get_input()
         cur_session = self.session
@@ -524,7 +528,7 @@ class App(customtkinter.CTk):
         serapp.label = customtkinter.CTkLabel(
             frame, text=f"User: {self.entry.get()}", text_color="white"
         )
-        cur_user = self.entry.get()
+        
         serapp.label1 = customtkinter.CTkLabel(
             frame, text=f"Current Ip: {socket1.gethostbyname(socket1.gethostname())}", text_color="white"
         )
@@ -552,7 +556,14 @@ class App(customtkinter.CTk):
         serapp.label2.grid(row=3, column=0, padx=20, pady=5, sticky="ew")
         self.scrollable = customtkinter.CTkScrollableFrame(serapp, width = 1000, height=700)
         self.scrollable.pack(pady=10)
-        pc1 = ClientPC(self.scrollable, "testasdasdasdasdasdsad")
+        global cur_user
+        cur_user = self.entry.get()
+        #print(cur_user,"1")
+        #pc1 = ClientPC(self.scrollable, "testasdasdasdasdasdsad")
+        #pc2 = ClientPC(self.scrollable, "asd")
+        #pc3 = ClientPC(self.scrollable, "qwe")
+        #pc4 = ClientPC(self.scrollable, "zxc")
+        runsql_forinterval(serapp)
 
     def history(self):
         serapp.iconify()
@@ -764,53 +775,6 @@ def startTray(stuapp):
     icon.run()
 
 import time
-def discover_server_ip():
-    # Set the broadcast address and port
-    broadcast_address = '255.255.255.255'
-    port = 12345
-
-    # Create a UDP socket
-    sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-    sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-    try:
-        # Enable broadcasting mode
-        sock.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-        sock.bind(('', port))
-
-        # Send a broadcast message
-        message = b"DiscoverServer"
-        sock.sendto(message, (broadcast_address, port))
-
-        # Listen for responses for 5 seconds
-        sock.settimeout(5)
-        start_time = time.time()
-
-        while time.time() - start_time < 5:
-            try:
-                # Receive response
-                data, address = sock.recvfrom(1024)
-
-                # Check if the response is from the server
-                if data == b"ServerResponse":
-                    return address[0]
-
-            except socket.timeout:
-                # Timeout occurred, no more responses expected
-                break
-
-    except socket.error:
-        # Error handling
-        print("Error occurred while discovering the server.")
-        return None
-
-    finally:
-        # Close the socket
-        sock.close()
-
-    print("Server not found.")
-    return None
-
 
 class ClientPC(customtkinter.CTkFrame):
     def __init__(self, parent, name):
@@ -841,7 +805,7 @@ class ClientPC(customtkinter.CTkFrame):
         #button.grid(row=0, column=2, padx=20, pady=10, sticky="ew")
         #self.button1.grid(row=0, column=4, padx=20, pady=10, sticky="ew")
         #grid_columnconfigure((0, 3), weight=1)
-        self.name = ""
+        self.name = name
         self.status = ""
         self.normal()
         
@@ -878,20 +842,42 @@ class ClientPC(customtkinter.CTkFrame):
         self.configure(border_color="red", border_width=1)
 
 def dbrequest(name,time,status):
+    global cur_user, cur_session, globalqueryqueue
     conn = sqlite3.connect("db.db")
-    id = conn.execute("SELECT ID FROM Account WHERE Name='{}'".format(cur_user)).fetchall()
+    try:
+        id = conn.execute("SELECT ID FROM Account WHERE Name='{}'".format(cur_user)).fetchall()
+    except Exception as e:
+        print("on db request", e)
+    #print("SELECT ID FROM Account WHERE Name='{}'".format(cur_user))
+    #print(id,"dbpush")
     conn.close()
-    query = f"INSERT INTO History (Acct ID, Session, Time, Status, Student ID) VALUES ('{id[0]}','{cur_session}','{time}','{status}','{name}')"
+    query = f"INSERT INTO History (AcctID, Session, Time, Status, StudentID) VALUES ('{id[0][0]}','{cur_session}','{time}','{status}','{name}')"
     globalqueryqueue.append(query)
 
 def commitquery_queue():
+    global globalqueryqueue
     db=sqlite3.connect('db.db')
-    while len(globalqueryqueue)>0:
-        query = globalqueryqueue.pop()
-        db.execute(query)
-    db.commit()
-    print("committ success")
+    if len(globalqueryqueue)!=0:
+        while len(globalqueryqueue)>0:
+            query = globalqueryqueue.pop()
+            try:
+                db.execute(query)
+            except Exception as e:
+                print(e, "error on: ", query)
+        try:
+            db.commit()
+            print("committ success")
+        except:
+            print(e, "error on commit")
+    else:
+        print("empty queue")
     db.close()
+
+def runsql_forinterval(serapp):
+    global stuapp
+    if not global_stop:
+        commitquery_queue()
+        serapp.after(120000, lambda: runsql_forinterval(serapp))
 
 if __name__ == "__main__":
     global app
