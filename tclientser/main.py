@@ -562,7 +562,7 @@ class App(customtkinter.CTk):
         global cur_user
         cur_user = self.entry.get()
         #print(cur_user,"1")
-        pc1 = ClientPC(self.scrollable, "2019-0045")
+        #pc1 = ClientPC(self.scrollable, "2019-0045")
         #pc2 = ClientPC(self.scrollable, "asd")
         #pc3 = ClientPC(self.scrollable, "qwe")
         #pc4 = ClientPC(self.scrollable, "zxc")
