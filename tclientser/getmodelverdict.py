@@ -4,6 +4,8 @@ import numpy as np
 import os
 import csv
 from keras.models import load_model
+from notifypy import Notify
+
 HEADERSIZE = 10
 
 def ExtractEyeAndMouthLandmarks(face_mesh, is3d):
@@ -35,6 +37,17 @@ def pack(message):
     message = f'{len(message):<{HEADERSIZE}}' + message
     return message
 
+
+#self.notification.message = f"No face detected for the last {frame_reset_threshold/30} seconds"
+#self.notification.send()
+def notify_client(verdict):
+    status = ""
+    notification = Notify()
+    message_dict = {"Drowsy": "Are you alright? The model is detecting drowsiness", "No Face": "No face detected"}
+    notification.title = "Status Detection"
+    notification.message = message_dict[verdict]
+    notification.send()
+
 def modelpredict(coordinates, app):
     #coordinates to numpy
     narray = np.array([coordinates]).reshape(1, len(coordinates), -1)
@@ -51,4 +64,6 @@ def modelpredict(coordinates, app):
 
     print(result, "MODEL RESULT")
     print(verdict, "MODEL RESULT")
+    if verdict == "Drowsy":
+        notify_client(verdict)
     app.server.send(bytes(pack("1"+str(verdict)), "utf-8"))

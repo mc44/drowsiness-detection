@@ -147,6 +147,7 @@ class App(customtkinter.CTk):
         notification = Notify()
         notification.title = "Welcome to the App"
         notification.message = "Please select on whether you are a client or a server user!"
+        #getmodelverdict.notify_client("Drowsy")
         notification.send()
 
     def validate(self):
@@ -286,6 +287,7 @@ class App(customtkinter.CTk):
                 frames = []
                 nofaceframes = 0
                 self.server.send(bytes(pack("1"+str("no_face")), "utf-8"))
+                getmodelverdict.notify_client("No Face")
         #model process
         #frame_coordinates = getmodelverdict.ExtractEyeAndMouthLandmarks(results, False)
         #frames.append(frame_coordinates)
@@ -560,7 +562,7 @@ class App(customtkinter.CTk):
         global cur_user
         cur_user = self.entry.get()
         #print(cur_user,"1")
-        #pc1 = ClientPC(self.scrollable, "testasdasdasdasdasdsad")
+        pc1 = ClientPC(self.scrollable, "2019-0045")
         #pc2 = ClientPC(self.scrollable, "asd")
         #pc3 = ClientPC(self.scrollable, "qwe")
         #pc4 = ClientPC(self.scrollable, "zxc")
@@ -725,6 +727,11 @@ def pack(message):
     message = f'{len(message):<{HEADERSIZE}}' + message
     return message
 
+def pack_clientname(message,size):
+    message =  f'{message:<{size}}|'
+    print(message)
+    return message
+
 def list_ports():
     """
     Test the ports and returns a tuple with the available ports and the ones that are working.
@@ -797,9 +804,11 @@ class ClientPC(customtkinter.CTkFrame):
         super().__init__(parent)
         # Initialize
         # self.frame.grid_propagate(False)
+        self.name = name
+
         self.configure(width=300)
         self.label = customtkinter.CTkLabel(
-            self, text=f"PC ID: {name}", text_color="white"
+            self, text=f"PC ID: {pack_clientname(self.name,100)}", text_color="white"
         )
         self.label1 = customtkinter.CTkLabel(
             self, text=f"Status: Not Drowsy", text_color="white"
@@ -812,25 +821,28 @@ class ClientPC(customtkinter.CTkFrame):
 
         # Grid Placement
         self.pack(pady=10)
-        self.img = ImageTk.PhotoImage(Image.open("./images/pc_green.png"))
-        self.canvas = tkinter.Canvas(self, width=self.img.width(), height=self.img.height())
+        #self.img = ImageTk.PhotoImage(Image.open("./images/pc_green.png").resize((60, 60)).convert('RGBA'))
+        #self.canvas = tkinter.Canvas(self, width=self.img.width(), height=self.img.height())
+        
+        # Create a PhotoImage from the resized image
+        resized_img, photo = self.prep_image("./images/pc_green.png")
+        self.canvas = tkinter.Canvas(self, width=resized_img.width, height=resized_img.height)
+        self.canvas.image = photo
+        self.image_item = self.canvas.create_image(resized_img.width//2, resized_img.height//2, image=photo)
+
+
         self.canvas.grid(row=0, column=0,padx=5,pady=5)
-        self.canvas.create_image(5, 5, image=self.img, anchor="nw")
+        #self.canvas.create_image(5, 5, image=self.img, anchor="nw")
         self.label.grid(row=0, column=1, columnspan = 2, padx=20, pady=5, sticky="ew")
         self.label1.grid(row=0, column=3, padx=20, pady=5, sticky="ew")
         #button.grid(row=0, column=2, padx=20, pady=10, sticky="ew")
         #self.button1.grid(row=0, column=4, padx=20, pady=10, sticky="ew")
         #grid_columnconfigure((0, 3), weight=1)
-        self.name = name
-        self.status = ""
+        
+        
         self.normal()
-        self.notification = Notify()
-        self.notification.title = "Status Detection"
-        self.notification.message = ""
         #self.notification.send()
         
-        
-
     def forget(self):
         self.label.destroy()
         self.label1.destroy()
@@ -839,35 +851,66 @@ class ClientPC(customtkinter.CTkFrame):
         print("frame removed")
     
     def change_name(self,name):
-        self.label.configure(text=f"PC ID: {name}")
         self.name = name
+        self.label.configure(text=f"PC ID: {pack_clientname(self.name,100)}")
         print(self.name,name)
         #self.normal()
     
     def normal(self):
         if self.status!="normal":
             dbrequest(self.name,time.time()*1000,"normal")
-        self.img.paste(Image.open("./images/pc_green.png"))
+        
+        #get new photoimage
+        resized_img, new_photo = self.prep_image("./images/pc_green.png")
+        self.canvas.image = new_photo
+        # Update the photo object associated with the canvas
+        self.canvas.itemconfigure(self.image_item, image=new_photo)
+        self.canvas.photo = new_photo
+
         self.configure(border_color="green", border_width=1)
         self.label1.configure(text=f"Status: Not Drowsy")
 
     def no_face(self):
         if self.status!="no_face":
             dbrequest(self.name,time.time()*1000,"no_face")
-            self.notification.message = f"No face detected for {frame_reset_threshold/30} seconds"
-            self.notification.send()
-        self.img.paste(Image.open("./images/pc_red.png"))
+        
+        #get new photoimage
+        resized_img, new_photo = self.prep_image("./images/pc_red.png")
+        self.canvas.image = new_photo
+        # Update the photo object associated with the canvas
+        self.canvas.itemconfigure(self.image_item, image=new_photo)
+        self.canvas.photo = new_photo
+
         self.configure(border_color="yellow", border_width=1)
         self.label1.configure(text=f"Status: No Face   ")
     
     def drowsy(self):
         if self.status!="drowsy":
             dbrequest(self.name,time.time()*1000,"drowsy")
-            self.notification.message = f"Are you alright? The model thinks your drowsy"
-            self.notification.send()
-        self.img.paste(Image.open("./images/pc_red.png"))
+        
+        #get new photoimage
+        resized_img, new_photo = self.prep_image("./images/pc_red.png")
+        self.canvas.image = new_photo
+        # Update the photo object associated with the canvas
+        self.canvas.itemconfigure(self.image_item, image=new_photo)
+        self.canvas.photo = new_photo
+
         self.configure(border_color="red", border_width=1)
         self.label1.configure(text=f"Status: Drowsy    ")
+    
+    def prep_image(self,image_path):
+        self.img = Image.open(image_path).convert('RGBA')
+
+        # Create a transparent background image of the same size
+        background = Image.new('RGBA', self.img.size, (0, 0, 0, 0))
+
+        # Paste the image onto the transparent background
+        background.paste(self.img, (5, 5), self.img)
+
+        # Resize the image
+        resized_img = background.resize((60, 60))
+
+        return resized_img, ImageTk.PhotoImage(resized_img)
 
 def dbrequest(name,time,status):
     global cur_user, cur_session, globalqueryqueue
