@@ -5,6 +5,7 @@ import os
 import csv
 from keras.models import load_model
 from notifypy import Notify
+import time
 
 HEADERSIZE = 10
 
@@ -49,6 +50,7 @@ def notify_client(verdict):
     notification.send()
 
 def modelpredict(coordinates, app):
+    #start_time = time.time()
     #coordinates to numpy
     narray = np.array([coordinates]).reshape(1, len(coordinates), -1)
     #write_list_to_file("output.txt", coordinates)
@@ -57,6 +59,10 @@ def modelpredict(coordinates, app):
 
     
     result = model.predict(narray)
+    #end_time = time.time()
+    #runtime = end_time - start_time
+    #print(start_time, " ", end_time)
+    #print(f"Runtime: {runtime} seconds")
     predicted_class = np.argmax(result)
 
     labels = ['Not Drowsy', 'Drowsy']
@@ -66,4 +72,4 @@ def modelpredict(coordinates, app):
     print(verdict, "MODEL RESULT")
     if verdict == "Drowsy":
         notify_client(verdict)
-    app.server.send(bytes(pack("1"+str(verdict)), "utf-8"))
+    app.server.send(bytes(pack("1"+str(verdict)+"-"+str(time.time())), "utf-8"))

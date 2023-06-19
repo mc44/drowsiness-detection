@@ -1,6 +1,4 @@
 import customtkinter
-import client
-import pystray
 import PIL.Image
 import mediapipe as mp
 from mediapipe.tasks import python
@@ -8,7 +6,7 @@ from mediapipe.tasks.python import vision
 #from socket import AF_INET, SOCK_STREAM, SOL_SOCKET, SO_REUSEADDR
 from socket import *
 import socket as socket1
-#socket import * overlaps with import socket, import * is needed for initiatinng server, socket1 is needed for shutdownz
+#socket import * overlaps with import socket, import * is needed for initiatinng server, socket1 is needed for shutdown
 mp_drawing = mp.solutions.drawing_utils
 mp_drawing_styles = mp.solutions.drawing_styles
 mp_face_mesh = mp.solutions.face_mesh
@@ -20,7 +18,6 @@ import tkinter
 from tkinter import messagebox, ttk
 import re
 from datetime import datetime
-from pythonping import ping
 import dbcalls
 from notifypy import Notify
 import getmodelverdict
@@ -29,7 +26,7 @@ import sqlite3
 right_eye_landmarks = [33, 246, 160, 159, 158, 157, 173, 133, 155, 154, 153, 145, 144, 163, 7]
 left_eye_landmarks = [362, 382, 381, 380, 374, 373, 390, 249, 466, 388, 387, 386, 385, 384, 398]
 mouth_landmarks = [13, 14, 312, 317, 82, 87, 178, 402, 311, 81, 88, 95, 183, 42, 78, 318, 310, 324, 415, 308]
-framecount = 1500
+framecount = 1800
 frame_reset_threshold = 900
 currentstatus = "normal"
 HEADERSIZE = 10
@@ -108,8 +105,8 @@ class App(customtkinter.CTk):
         customtkinter.set_default_color_theme("dark-blue")
         customtkinter.set_appearance_mode("dark")
         # self.app = customtkinter.CTk()
-        self.screen_width = int(self.winfo_screenwidth() * 0.5)
-        self.screen_height = int(self.winfo_screenheight() * 0.4)
+        self.screen_width = int(self.winfo_screenwidth() * 0.45)
+        self.screen_height = int(self.winfo_screenheight() * 0.35)
         self.eval("tk::PlaceWindow . center")
         self.geometry(f"{self.screen_width}x{self.screen_height}")
         # self.app.grid_columnconfigure(0, weight=1)
@@ -151,7 +148,7 @@ class App(customtkinter.CTk):
         notification.send()
 
     def validate(self):
-        val = re.search("^[\w\d_-]+$", self.entry.get())
+        val = re.search("^[\w\d\s_-]+$", self.entry.get())
         #print(self.entry.get(), val)
         if (val is None):
             messagebox.showwarning(title="No name input", message="Please write a value in the PC User entry. Thanks")
@@ -161,7 +158,7 @@ class App(customtkinter.CTk):
             return True
         
     def validatelogin(self):
-        val = re.search("^[\w\d_-]+$", self.entry.get())
+        val = re.search("^[\w\d\s_-]+$", self.entry.get())
         #print(self.entry.get(), val)
         if (val is None):
             messagebox.showwarning(title="No name input", message="Please write a value in the PC User entry. Thanks")
@@ -301,13 +298,10 @@ class App(customtkinter.CTk):
             # Calculate the elapsed time
             elapsed_time = end_time - self.start_time
             print(elapsed_time)
-            
-
+        
         # Draw the face mesh annotations on the image.
         image.flags.writeable = True
         image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
-
-        
         mesh_image = cv2.flip(image, 1)
         image = Image.fromarray(mesh_image)
         self.update_gui(image)
@@ -656,12 +650,7 @@ class App(customtkinter.CTk):
             print ("Connection established with: ", clientAddress[0] + ":" + str(clientAddress[1]))
              # Receive data from the client
             data = clientSocket.recv(1024).decode()
-            #print(data,"here")
-            if data == "DiscoverServer":
-                # Broadcast response to client
-                clientSocket.send(ip.encode())
-                clientSocket.close()
-            elif(customtkinter.CTkToplevel.winfo_exists(serapp)==1):
+            if(customtkinter.CTkToplevel.winfo_exists(serapp)==1):
                 fullmsg = data[HEADERSIZE:]
                 if fullmsg[0]=="0":
                     gethostname=fullmsg[1:]
@@ -689,18 +678,22 @@ def clientThread(clientSocket, clientAddress, clientframe):
                     complete = False
                 
                 fullmsg += message.decode("utf-8")
-
                 if len(fullmsg)-HEADERSIZE == msglen:
                     complete = True
                     fullmsg = fullmsg[HEADERSIZE:]
                     newmsg=True
                     print(clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ fullmsg)
-
                 if complete:
                     #print(fullmsg, "complete")
                     if (fullmsg[0]=="0"):
                         clientframe.change_name(fullmsg[1:])
                     if (fullmsg[0]=="1"):
+                        #splitm = str(fullmsg).split(",")
+                        #end_time = time.time()
+                        #start_time = float(splitm[1])
+                        #print(splitm[1])
+                        #runtime = end_time - start_time
+                        #print(f"Runtime: {runtime} seconds")
                         if fullmsg[1:]=="Not Drowsy":
                             clientframe.normal()
                         elif fullmsg[1:]=="no_face":
@@ -710,7 +703,8 @@ def clientThread(clientSocket, clientAddress, clientframe):
                     for client in clients:
                         if client is not clientSocket:
                             client.send(pack((clientAddress[0] + ":" + str(clientAddress[1]) +" says: "+ fullmsg)).encode("utf-8"))
-        except:
+        except Exception as e:
+            print(e,"client thread")
             print("abrupt disconnect")
             clients.remove(clientSocket)
             print(clientAddress[0] + ":" + str(clientAddress[1]) +" disconnected")
@@ -719,7 +713,6 @@ def clientThread(clientSocket, clientAddress, clientframe):
             clients.remove(clientSocket)
             print(clientAddress[0] + ":" + str(clientAddress[1]) +" disconnected")
             break
-
     clientframe.forget()
     clientSocket.close()
 
@@ -786,16 +779,16 @@ def startTray(stuapp):
     global icon
     stuapp.withdraw()
     image = PIL.Image.open("drowsiness-detection/tclientser/images/awake-logo.png")
-    icon = pystray.Icon(
-        "Awake",
-        image,
-        menu=pystray.Menu(
-            pystray.MenuItem(
-                "Show App", lambda: showstudent_closetray(stuapp), default=True
-            )
-        ),
-    )
-    icon.run()
+    #icon = pystray.Icon(
+    #    "Awake",
+    #    image,
+    #    menu=pystray.Menu(
+    #        pystray.MenuItem(
+    #            "Show App", lambda: showstudent_closetray(stuapp), default=True
+    #        )
+    #    ),
+    #)
+    #icon.run()
 
 import time
 
@@ -839,6 +832,7 @@ class ClientPC(customtkinter.CTkFrame):
         #self.button1.grid(row=0, column=4, padx=20, pady=10, sticky="ew")
         #grid_columnconfigure((0, 3), weight=1)
         
+        self.status=""
         
         self.normal()
         #self.notification.send()
