@@ -34,6 +34,8 @@ globalqueryqueue = []
 cur_user = ""
 cur_session = ""
 global_stop = False
+isClient = False
+mainIP = ""
 
 def center(win):
     """
@@ -206,17 +208,29 @@ class App(customtkinter.CTk):
         if (self.server):
             self.server.close()
         try:
-            global global_stop
-            global_stop = True
-            commitquery_queue()
-            print("do_run to false, stop server thread")
-            th.do_run = False
-            ip = socket1.gethostbyname(socket1.gethostname())
-            port = 5050
-            test = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
-            test.connect((ip, port))
-            test.send(bytes(pack("0"+str(socket1.gethostname())), "utf-8"))
-            test.close()
+            global isClient, mainIP
+            print(isClient, mainIP,"test global")
+            if isClient:
+                server_ip = mainIP
+                print("client_close")
+                #ip = socket1.gethostbyname(socket1.gethostname())
+                port = 5050
+            
+                self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+                self.server.connect((server_ip, port))
+                self.server.send(bytes(pack("2"+f"{self.client_ip},"+"disconnect"), "utf-8"))
+            else:
+                global global_stop
+                global_stop = True
+                commitquery_queue()
+                print("do_run to false, stop server thread")
+                th.do_run = False
+                ip = socket1.gethostbyname(socket1.gethostname())
+                port = 5050
+                test = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+                test.connect((ip, port))
+                test.send(bytes(pack("0"+str(socket1.gethostname())), "utf-8"))
+                test.close()
             
             #self.hostSocket.shutdown(socket1.SHUT_RDWR)
             #self.hostSocket.close()
@@ -283,7 +297,8 @@ class App(customtkinter.CTk):
             if nofaceframes>=frame_reset_threshold:
                 frames = []
                 nofaceframes = 0
-                self.server.send(bytes(pack("1"+str("no_face")), "utf-8"))
+                self.connect_send("1",str("no_face"))
+                #self.server.send(bytes(pack("1"+f"{self.client_ip},"+str("no_face")), "utf-8"))
                 getmodelverdict.notify_client("No Face")
         #model process
         #frame_coordinates = getmodelverdict.ExtractEyeAndMouthLandmarks(results, False)
@@ -291,7 +306,7 @@ class App(customtkinter.CTk):
         if len(frames)%100 == 0:
             print(len(frames))
         if len(frames)>framecount:
-            t = Thread(target=lambda: getmodelverdict.modelpredict(frames,self), daemon = True)
+            t = Thread(target=lambda: getmodelverdict.modelpredict(frames,self,self.server_ip), daemon = True)
             t.start()
             frames = []
             end_time = time.time()
@@ -316,20 +331,26 @@ class App(customtkinter.CTk):
             print("loop stopped")
             #self.server.send(bytes(pack(str("1camera disconnect"+str(datetime.now()))), "utf-8"))
 
-
+    def connect_send(self,type,msg):
+        server_ip = self.server_ip
+        print(server_ip)
+        #ip = socket1.gethostbyname(socket1.gethostname())
+        port = 5050
+    
+        self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
+        self.server.connect((server_ip, port))
+        self.server.send(bytes(pack(type+f"{self.client_ip},"+str(msg)), "utf-8"))
+            
     def start_frame(self, frame):
+        global isClient, mainIP
+        isClient = True
+        mainIP = self.server_ip
         print("here atleast1")
         self.run_status = False
         global ip
+        self.client_ip = socket1.gethostbyname(socket1.gethostname())
         try: 
-            server_ip = self.server_ip
-            print(server_ip)
-            #ip = socket1.gethostbyname(socket1.gethostname())
-            port = 5050
-        
-            self.server = socket1.socket(socket1.AF_INET, socket1.SOCK_STREAM)
-            self.server.connect((server_ip, port))
-            self.server.send(bytes(pack("0"+str(self.entry.get())), "utf-8"))
+            self.connect_send("0",self.entry.get())
             stuapp.label1.configure(text = f"Connection Status: Connected at {socket1.gethostname()}")
             #print(ping(server_ip, verbose=True))
         except error:
@@ -631,11 +652,14 @@ class App(customtkinter.CTk):
         serapp.deiconify()
 
     def serverthread(self):
-        global th
+        global th, isClient
+        isClient = False
         self.hostSocket = socket(AF_INET, SOCK_STREAM)
         self.hostSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR,1)
         hostIp = "0.0.0.0"
         ip = socket1.gethostbyname(socket1.gethostname())
+        clientdict = {}
+        socketdict = {}
         print(ip)
         gethostname = ""
         portNumber = 5050
@@ -652,12 +676,34 @@ class App(customtkinter.CTk):
             data = clientSocket.recv(1024).decode()
             if(customtkinter.CTkToplevel.winfo_exists(serapp)==1):
                 fullmsg = data[HEADERSIZE:]
+                msplit = fullmsg[1:].split(",")
+                print(msplit)
                 if fullmsg[0]=="0":
-                    gethostname=fullmsg[1:]
-                clients.add(clientSocket)
-                newframe = ClientPC(self.scrollable, gethostname)
-                thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe), daemon = True)
-                thread.start()
+                    gethostname=msplit[1]
+                    #clients.add(clientSocket)
+                    #socketdict[msplit[0]] = clientSocket
+                    newframe = ClientPC(self.scrollable, gethostname)
+                    clientdict[msplit[0]] = newframe
+                    print(clientdict)
+                    clientSocket.close()
+                    #print(socketdict)
+                if fullmsg[0]=="1":
+                    status = msplit[1]
+                    if status=="Not Drowsy":
+                        clientdict[msplit[0]].normal()
+                    elif status=="no_face":
+                        clientdict[msplit[0]].no_face()
+                    elif status=="Drowsy":
+                        clientdict[msplit[0]].drowsy()
+                    clientSocket.close()
+                if fullmsg[0]=="2":
+                    print("disconnect")
+                    clientdict[msplit[0]].forget()
+                    clientSocket.close()
+                    #clients.remove(socketdict[msplit[0]])
+                    #socketdict[msplit[0]].close()
+                #thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe), daemon = True)
+                #thread.start()
         
         #it doesnt reach here
         self.hostSocket.close()

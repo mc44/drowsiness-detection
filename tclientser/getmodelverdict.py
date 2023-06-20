@@ -49,7 +49,7 @@ def notify_client(verdict):
     notification.message = message_dict[verdict]
     notification.send()
 
-def modelpredict(coordinates, app):
+def modelpredict(coordinates, app, ip):
     #start_time = time.time()
     #coordinates to numpy
     narray = np.array([coordinates]).reshape(1, len(coordinates), -1)
@@ -72,4 +72,5 @@ def modelpredict(coordinates, app):
     print(verdict, "MODEL RESULT")
     if verdict == "Drowsy":
         notify_client(verdict)
-    app.server.send(bytes(pack("1"+str(verdict)+"-"+str(time.time())), "utf-8"))
+    app.connect_send("1",str(verdict))
+    #app.server.send(bytes(pack("1"+f"{ip},"+str(verdict)), "utf-8"))
