@@ -43,7 +43,7 @@ This repository contains code for a drowsiness detection system using Python.
        You can use another device connected to the same network and repeat all steps above, or run another instance in the terminal and only rerun steps 3-6
     ```
 
-## Usage
+## Usage (NOTE: model predictions are in 1 minute intervals, if there are no landmarks being generated for 900 frames straight or 30 seconds, then no face detected will be the new status)
 
 After following the setup instructions, you can run the drowsiness detection system through main.py
 
