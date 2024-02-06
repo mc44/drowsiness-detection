@@ -16,7 +16,7 @@ import threading
 from threading import Thread
 import tkinter
 from tkinter import messagebox, ttk
-import re
+import re 
 from datetime import datetime
 import dbcalls
 from notifypy import Notify
@@ -700,12 +700,6 @@ class App(customtkinter.CTk):
                     print("disconnect")
                     clientdict[msplit[0]].forget()
                     clientSocket.close()
-                    #clients.remove(socketdict[msplit[0]])
-                    #socketdict[msplit[0]].close()
-                #thread = Thread(target=clientThread, args=(clientSocket, clientAddress, newframe), daemon = True)
-                #thread.start()
-        
-        #it doesnt reach here
         self.hostSocket.close()
         print("socket down exit loop")
 
@@ -985,7 +979,7 @@ def commitquery_queue():
     db.close()
 
 def runsql_forinterval(serapp):
-    global stuapp, global_stop
+    global global_stop
     if not global_stop:
         commitquery_queue()
         serapp.after(120000, lambda: runsql_forinterval(serapp))
@@ -994,3 +988,4 @@ if __name__ == "__main__":
     global app
     app = App()
     app.mainloop()
+
