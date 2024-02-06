@@ -4,12 +4,17 @@ This repository contains code for a drowsiness detection system using Python.
 
 ## Setup Instructions
 
-1. **Create Virtual Environment:**
+1. **Navigate to Project Directory:**
+    ```bash
+    cd drowsiness-detection
+    ```
+
+2. **Create Virtual Environment:**
     ```bash
     python -m venv env
     ```
 
-2. **Activate Virtual Environment:**
+3. **Activate Virtual Environment:**
     - For Windows:
         ```bash
         .\env\Scripts\activate
@@ -19,14 +24,23 @@ This repository contains code for a drowsiness detection system using Python.
         source env/bin/activate
         ```
 
-3. **Navigate to Project Directory:**
-    ```bash
-    cd drowsiness-detection
-    ```
-
 4. **Install Requirements:**
     ```bash
     pip install -r requirements.txt
+    ```
+
+5. **Navigate to Program Directory:**
+    ```bash
+    cd tclientser
+    ```
+
+6. **Run Client Application:**
+    ```bash
+    python main.py
+    ```
+7.  **For Testing**
+    ```bash
+       You can use another device connected to the same network and repeat all steps above, or run another instance in the terminal and only rerun steps 3-6
     ```
 
 ## Usage
